@@ -1,0 +1,1 @@
+preload = ["src/core/plugins/yaml.ts"]
