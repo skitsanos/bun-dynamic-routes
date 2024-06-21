@@ -12,6 +12,8 @@ export interface HonoApp
     upgradeWebSocket: UpgradeWebSocket
 }
 
+const logger = new Logger('RouteLoader')
+
 const parsePath = async (instance: HonoApp, root: string, p: string) =>
 {
     if (existsSync(p))
@@ -40,12 +42,12 @@ const parsePath = async (instance: HonoApp, root: string, p: string) =>
 
                     if (method !== 'ws')
                     {
-                        Logger.log(`Mounting ${method.toUpperCase()} ${pathParsed}`);
+                        logger.trace(`Mounting ${method.toUpperCase()} ${pathParsed}`);
                         instance.app.on(method.toUpperCase(), pathParsed, routeModule.default);
                     }
                     else
                     {
-                        Logger.log(`Mounting WebSocket at ${pathParsed}`);
+                        logger.trace(`Mounting WebSocket at ${pathParsed}`);
 
                         instance.app.on('GET', pathParsed, instance.upgradeWebSocket(routeModule.default));
                     }
@@ -62,10 +64,10 @@ const parsePath = async (instance: HonoApp, root: string, p: string) =>
  */
 const loadRoutes = async (instance: HonoApp, path: string) =>
 {
-    Logger.log(`Parsing routes at ${path}${pathSeparator}...`);
+    logger.trace(`Parsing routes at ${path}${pathSeparator}...`);
 
     const routesPath = pathJoin(import.meta.dir, '..', 'routes');
-    Logger.log(`Resolved to ${routesPath}${pathSeparator}...`);
+    logger.trace(`Resolved to ${routesPath}${pathSeparator}...`);
 
     //convert to the absolute path
     const absolutRoutesPath = isAbsolute(routesPath) ? routesPath : resolve(routesPath);
@@ -74,7 +76,7 @@ const loadRoutes = async (instance: HonoApp, path: string) =>
 
     await parsePath(instance, posixPath, pathJoin(posixPath, '.'));
 
-    Logger.log('Routes parsed.');
+    logger.trace('Routes parsed.');
 };
 
 export default loadRoutes;
