@@ -1,11 +1,11 @@
 import response from '@/utils/response';
 import {type Context} from 'hono';
 
-export default async (ctx: Context) =>
+export default async ({req, json}: Context) =>
 {
-    const {userId} = ctx.req.param();
+    const {userId} = req.param();
 
-    return ctx.json(response.result({
+    return json(response.result({
         user: userId
     }));
 };
