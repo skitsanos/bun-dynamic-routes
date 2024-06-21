@@ -1,17 +1,31 @@
 import {plugin} from 'bun';
+import merge from '@/utils/merge.ts';
 
 await plugin({
     name: 'YAML',
     async setup(build)
     {
-        const {parse} = await import('yaml');
+        const {parse, stringify} = await import('yaml');
 
         // when a .yaml file is imported...
         build.onLoad({filter: /\.(yaml|yml)$/}, async (args) =>
         {
             // read and parse the file
-            const text = await Bun.file(args.path).text();
-            const exports = parse(text) as Record<string, any>;
+            const pathToConfig = args.path;
+
+            const text = await Bun.file(pathToConfig).text();
+
+            let config = parse(text) as Record<string, any>;
+
+            const updateHandler = (updatedConfig: Partial<Record<string, any>>) =>
+            {
+                const newConfig = merge(config, updatedConfig);
+                config = newConfig;
+
+                Bun.write(pathToConfig, stringify(newConfig));
+            };
+
+            const exports = {config, update: updateHandler};
 
             // and returns it as a module
             return {
