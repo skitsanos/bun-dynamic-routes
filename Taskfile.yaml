@@ -1,0 +1,7 @@
+version: 3
+
+tasks:
+  dev:
+    env:
+    cmds:
+      - bun run --watch src/index.ts
