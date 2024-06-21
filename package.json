@@ -1,6 +1,6 @@
 {
   "name": "bun-dynamic-routes",
-  "module": "index.ts",
+  "version": "2.0.0",
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest"
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "dayjs": "^1.11.11",
-    "hono": "^4.3.5",
-    "yaml": "^2.4.2"
+    "hono": "^4.4.7",
+    "yaml": "^2.4.5"
   }
 }
