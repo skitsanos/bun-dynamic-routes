@@ -1,7 +1,29 @@
 version: 3
 
+vars:
+  DOCKER_TAG: dev/bun-api-server
+
+env:
+  PORT: 3333
+  OPENAI_API_KEY: sk-USE-YOUR-OWN-API-KEY
+
+includes:
+  test: Taskfile.tests.yaml
+
 tasks:
   dev:
-    env:
     cmds:
       - bun run --watch src/index.ts
+
+  docker-build:
+    cmds:
+      - docker build -t {{.DOCKER_TAG}} --progress plain --no-cache .
+
+  docker-run:
+    cmds:
+      - docker run -d -it --rm -p 3000:3000 -e OPENAI_API_KEY={{.OPENAI_API_KEY}} {{.DOCKER_TAG}}
+
+  docker-push:
+    cmds:
+      - docker push {{.DOCKER_TAG}}
+
