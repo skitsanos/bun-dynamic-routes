@@ -35,7 +35,7 @@ await loadRoutes({
 }, 'routes');
 
 const server = Bun.serve({
-    port: config?.server?.port || Number(PORT) || 3000,
+    port: Number(PORT) || config?.server?.port || 3000,
     ...config?.server?.ssl && {
         cert: config.server.ssl.cert,
         key: config.server.ssl.key
