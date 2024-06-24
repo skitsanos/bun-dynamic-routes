@@ -1,5 +1,5 @@
 import {existsSync, readdirSync, statSync} from 'fs';
-import {basename, dirname, isAbsolute, join as pathJoin, posix, resolve, sep as pathSeparator, extname} from 'path';
+import {basename, dirname, extname, isAbsolute, join as pathJoin, posix, resolve, sep as pathSeparator} from 'path';
 import Logger from './logger';
 
 import {type Hono} from 'hono';
@@ -12,7 +12,7 @@ export interface HonoApp
     upgradeWebSocket: UpgradeWebSocket
 }
 
-const logger = new Logger('RouteLoader')
+const logger = new Logger('RouteLoader');
 
 const parsePath = async (instance: HonoApp, root: string, p: string) =>
 {
@@ -43,7 +43,15 @@ const parsePath = async (instance: HonoApp, root: string, p: string) =>
                     if (method !== 'ws')
                     {
                         logger.trace(`Mounting ${method.toUpperCase()} ${pathParsed}`);
-                        instance.app.on(method.toUpperCase(), pathParsed, routeModule.default);
+                        const handler = routeModule.default;
+                        if (Array.isArray(handler))
+                        {
+                            instance.app.on(method.toUpperCase(), pathParsed, ...handler);
+                        }
+                        else
+                        {
+                            instance.app.on(method.toUpperCase(), pathParsed, handler);
+                        }
                     }
                     else
                     {

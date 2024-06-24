@@ -22,3 +22,9 @@ tasks:
         POST http://localhost:{{.PORT}}/api/validate/hono
         HTTP 400
         " | hurl --test
+
+      - |
+        echo "
+        POST http://localhost:{{.PORT}}/api/validate/zod
+        HTTP 200
+        " | hurl --test
