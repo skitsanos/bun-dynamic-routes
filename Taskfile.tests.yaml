@@ -1,0 +1,24 @@
+version: 3
+
+silent: true
+
+tasks:
+  default:
+    desc: Run tests
+    cmds:
+      - |
+        # check if hurl is installed
+        if ! command -v hurl &> /dev/null
+        then
+            echo "hurl could not be found. Follow installation instructions at https://hurl.dev/docs/installation.html"
+            exit 1
+        fi
+      - |
+        echo "
+        GET http://localhost:{{.PORT}}/
+        " | hurl --test
+      - |
+        echo "
+        POST http://localhost:{{.PORT}}/api/validate/hono
+        HTTP 400
+        " | hurl --test
