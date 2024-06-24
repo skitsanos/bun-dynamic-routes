@@ -33,3 +33,35 @@ tasks:
         
         HTTP 200
         " | hurl --test
+
+      - echo "Generating random test file..."
+      - cmd: |
+          dd if=/dev/urandom of=random_file bs=1M count=1000
+        platforms:
+          - linux
+          - darwin
+      - cmd: |
+          e$out = new-object byte[] (100MB)
+          (new-object Random).NextBytes($out)
+          [IO.File]::WriteAllBytes("random_file", $out)
+        platforms:
+          - windows
+      - |
+        echo "
+        POST http://localhost:{{.PORT}}/api/upload
+        [MultipartFormData]
+        file: file,random_file; application/octet-stream
+        
+        HTTP 200
+        " | hurl --test
+        du -h random_file
+      - cmd: |
+          rm random_file
+          rm uploaded_*
+        platforms:
+          - linux
+          - darwin
+      - cmd: |
+          powershell -Command "Remove-Item random_file"
+        platforms:
+          - windows

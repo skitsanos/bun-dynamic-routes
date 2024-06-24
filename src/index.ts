@@ -8,6 +8,8 @@ import {config, update} from 'config/server.yaml';
 const logger = new Logger('Core');
 logger.trace('Starting server...');
 
+const loggerHttp = new Logger('HTTP');
+
 const {
     SERVER_NAME,
     PORT
@@ -41,6 +43,7 @@ const server = Bun.serve({
         key: config.server.ssl.key
     },
     fetch: app.fetch,
+    maxRequestBodySize: 200_000_000_000,
     websocket
 });
 

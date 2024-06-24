@@ -23,7 +23,7 @@ const validatorHandler = validator('form', (value, c) =>
 const contextHandler = (c: Context) =>
 {
     const body= c.req.valid('form');
-    console.log(body);
+    logger.trace(JSON.stringify(body));
     // ... do something
     return c.json(
         {
