@@ -26,5 +26,10 @@ tasks:
       - |
         echo "
         POST http://localhost:{{.PORT}}/api/validate/zod
+        [FormParams]
+        default: false
+        email: john.doe@nowhere.local
+        number: 33611223344
+        
         HTTP 200
         " | hurl --test

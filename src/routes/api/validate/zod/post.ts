@@ -6,7 +6,7 @@ import Logger from '@/utils/logger.ts';
 const logger = new Logger('ZodRoute');
 
 const schema = z.object({
-    body: z.string()
+    email: z.string()
 });
 
 const validatorHandler = validator('form', (value, c) =>
@@ -22,13 +22,14 @@ const validatorHandler = validator('form', (value, c) =>
 
 const contextHandler = (c: Context) =>
 {
-    const {body} = c.req.valid('form');
+    const body= c.req.valid('form');
+    console.log(body);
     // ... do something
     return c.json(
         {
             message: 'Created!'
         },
-        201
+        200
     );
 };
 
