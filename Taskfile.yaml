@@ -1,10 +1,12 @@
 version: 3
 
+silent: true
+
 vars:
   DOCKER_TAG: dev/bun-api-server
 
 env:
-  PORT: 3333
+  #PORT: 3333
   OPENAI_API_KEY: sk-USE-YOUR-OWN-API-KEY
 
 includes:
@@ -14,6 +16,14 @@ tasks:
   dev:
     cmds:
       - bun run --watch src/index.ts
+
+  compile:
+    cmds:
+      - |
+        # get app name from package.json with jq
+        APP_NAME=$(jq -r '.name' package.json)
+        bun run build-routes.ts
+        bun build src/index.ts --compile --outfile "dist/${APP_NAME}"
 
   docker-build:
     cmds:
