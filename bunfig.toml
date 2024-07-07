@@ -1,1 +1,8 @@
+telemetry = false
 preload = ["src/core/plugins/yaml.ts"]
+
+[run]
+# When true, suppresses the output of the command being run by bun run or bun.
+silent = true
+
+[build]

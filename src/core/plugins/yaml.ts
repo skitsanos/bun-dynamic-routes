@@ -1,11 +1,14 @@
 import {plugin} from 'bun';
 import merge from '@/utils/merge.ts';
 
-await plugin({
+const yamlPlugin = plugin({
     name: 'YAML',
     async setup(build)
     {
-        const {parse, stringify} = await import('yaml');
+        const {
+            parse,
+            stringify
+        } = await import('yaml');
 
         // when a .yaml file is imported...
         build.onLoad({filter: /\.(yaml|yml)$/}, async (args) =>
@@ -25,7 +28,10 @@ await plugin({
                 Bun.write(pathToConfig, stringify(newConfig));
             };
 
-            const exports = {config, update: updateHandler};
+            const exports = {
+                config,
+                update: updateHandler
+            };
 
             // and returns it as a module
             return {
@@ -35,3 +41,5 @@ await plugin({
         });
     }
 });
+
+export default await yamlPlugin;

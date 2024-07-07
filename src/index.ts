@@ -2,8 +2,10 @@ import {type Context, Hono} from 'hono';
 import {createBunWebSocket} from 'hono/bun';
 import Logger from '@/utils/logger.ts';
 import loadRoutes from '@/utils/loadRoutes.ts';
-// @ts-ignore
-import {config, update} from 'config/server.yaml';
+import loadConfig from '@/utils/config.ts';
+import {parseRoutesAtBuildTime} from '@/.routes';
+
+const {config} = await loadConfig('config/server.yaml');
 
 const logger = new Logger('Core');
 logger.trace('Starting server...');
@@ -28,13 +30,26 @@ app.use('*', async (c: Context, next) =>
     await next();
     const end = Bun.nanoseconds();
     c.res.headers.set('X-Response-Time', `${(end - start) / 1000000}`);
-    c.res.headers.set('Server', SERVER_NAME ?? 'bun-service');
+    c.res.headers.set('Server', (SERVER_NAME ?? config?.name) || 'bun-service');
+    loggerHttp.trace(`${c.req.method} ${c.req.url} - ${c.res.status} - ${c.res.headers.get('X-Response-Time')}ms`);
 });
 
-await loadRoutes({
-    app,
-    upgradeWebSocket
-}, 'routes');
+if (import.meta.dir.startsWith('/$bunfs'))
+{
+    logger.trace('Running in production mode');
+    await parseRoutesAtBuildTime({
+        app,
+        upgradeWebSocket
+    });
+}
+else
+{
+    logger.trace('Running in development mode');
+    await loadRoutes({
+        app,
+        upgradeWebSocket
+    }, 'routes');
+}
 
 const server = Bun.serve({
     port: Number(PORT) || config?.server?.port || 3000,
