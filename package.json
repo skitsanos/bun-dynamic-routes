@@ -1,17 +1,17 @@
 {
   "name": "bun-dynamic-routes",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.7.2"
   },
   "dependencies": {
-    "dayjs": "^1.11.11",
-    "hono": "^4.4.11",
-    "yaml": "^2.4.5",
-    "zod": "^3.23.8"
+    "dayjs": "^1.11.13",
+    "hono": "^4.6.16",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
   }
 }
