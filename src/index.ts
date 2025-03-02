@@ -1,16 +1,20 @@
 import {type Context, Hono} from 'hono';
 import {createBunWebSocket} from 'hono/bun';
-import Logger from '@/utils/logger.ts';
+import Logger, {LogLevel} from '@/utils/logger.ts';
 import loadRoutes from '@/utils/loadRoutes.ts';
-import loadConfig from '@/utils/config.ts';
-import {parseRoutesAtBuildTime} from '@/.routes';
+import {Configuration} from '@/core/configuration.ts';
 
-const {config} = await loadConfig('config/server.yaml');
+const {config} = await Configuration.getInstance();
 
-const logger = new Logger('Core');
+const loggerOptions = {
+    level: LogLevel.TRACE,
+    colorize: true
+};
+const logger = new Logger('Core', loggerOptions);
+
 logger.trace('Starting server...');
 
-const loggerHttp = new Logger('HTTP');
+const loggerHttp = new Logger('HTTP', loggerOptions);
 
 const {
     SERVER_NAME,
@@ -30,26 +34,26 @@ app.use('*', async (c: Context, next) =>
     await next();
     const end = Bun.nanoseconds();
     c.res.headers.set('X-Response-Time', `${(end - start) / 1000000}`);
-    c.res.headers.set('Server', (SERVER_NAME ?? config?.name) || 'bun-service');
+    c.res.headers.set('Server', (SERVER_NAME ?? config?.serviceName) || 'bun-service');
     loggerHttp.trace(`${c.req.method} ${c.req.url} - ${c.res.status} - ${c.res.headers.get('X-Response-Time')}ms`);
 });
 
-if (import.meta.dir.startsWith('/$bunfs'))
-{
-    logger.trace('Running in production mode');
-    await parseRoutesAtBuildTime({
-        app,
-        upgradeWebSocket
-    });
-}
-else
-{
-    logger.trace('Running in development mode');
-    await loadRoutes({
-        app,
-        upgradeWebSocket
-    }, 'routes');
-}
+// if (isRunningAsCompiled())
+// {
+//     logger.trace('Running in production mode');
+//     await parseRoutesAtBuildTime({
+//         app,
+//         upgradeWebSocket
+//     });
+// }
+// else
+// {
+//     logger.trace('Running in development mode');
+await loadRoutes({
+    app,
+    upgradeWebSocket
+}, 'routes');
+// }
 
 const server = Bun.serve({
     port: Number(PORT) || config?.server?.port || 3000,
@@ -58,7 +62,7 @@ const server = Bun.serve({
         key: config.server.ssl.key
     },
     fetch: app.fetch,
-    maxRequestBodySize: 200_000_000_000,
+    maxRequestBodySize: 1_000_000_000,
     websocket
 });
 

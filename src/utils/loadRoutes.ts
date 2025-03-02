@@ -1,5 +1,5 @@
 import {existsSync, readdirSync, statSync} from 'fs';
-import {basename, dirname, extname, isAbsolute, join as pathJoin, posix, resolve, sep as pathSeparator} from 'path';
+import {basename, dirname, isAbsolute, join as pathJoin, posix, resolve, sep as pathSeparator} from 'path';
 import Logger from './logger';
 
 import {type Hono} from 'hono';
@@ -12,7 +12,7 @@ export interface HonoApp
     upgradeWebSocket: UpgradeWebSocket
 }
 
-const logger = new Logger('RouteLoader');
+const logger = new Logger('RouteLoader', {level: 'TRACE'});
 
 const parsePath = async (instance: HonoApp, root: string, p: string) =>
 {
@@ -29,7 +29,7 @@ const parsePath = async (instance: HonoApp, root: string, p: string) =>
                     await parsePath(instance, root, fullPath);
                 }
 
-                if (statSync(fullPath).isFile() && extname(fullPath) === '.ts')
+                if (statSync(fullPath).isFile() && fullPath.match(/.ts|.tsx$/))
                 {
                     const urlPart = fullPath.substring(root.length);
                     const urlPath = dirname(urlPart.replace(/\\/gi, '/'));
@@ -75,6 +75,7 @@ const loadRoutes = async (instance: HonoApp, path: string) =>
     logger.trace(`Parsing routes at ${path}${pathSeparator}...`);
 
     const routesPath = pathJoin(import.meta.dir, '..', 'routes');
+
     logger.trace(`Resolved to ${routesPath}${pathSeparator}...`);
 
     //convert to the absolute path

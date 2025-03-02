@@ -1,2 +1,10 @@
 server:
-  port: 5000
+  port: 3000
+  cors:
+    enabled: true
+    allowedOrigins: ["http://localhost:3000"]
+    allowedMethods: ["GET", "POST", "PUT", "DELETE"]
+    allowedHeaders: ["Content-Type", "Authorization"]
+    exposedHeaders: ["Authorization"]
+    allowCredentials: true
+    maxAge: 300
