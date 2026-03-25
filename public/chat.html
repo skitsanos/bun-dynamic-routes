@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chat — Bun WebSocket Demo</title>
+    <link rel="stylesheet" href="/assets/css/chat.css">
+</head>
+<body>
+    <header>
+        <h1>Bun WebSocket Chat</h1>
+        <span id="status">connecting</span>
+    </header>
+
+    <div id="login">
+        <label for="nameInput">Pick a name to join</label>
+        <input id="nameInput" type="text" placeholder="Your name" maxlength="20" autofocus>
+        <button onclick="joinChat()">Join</button>
+    </div>
+
+    <div id="chat">
+        <div id="messages"></div>
+        <div id="input-bar">
+            <input id="msgInput" type="text" placeholder="Type a message..." maxlength="500">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script src="/assets/js/chat.js"></script>
+</body>
+</html>

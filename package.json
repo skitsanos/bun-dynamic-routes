@@ -1,17 +1,21 @@
 {
   "name": "bun-dynamic-routes",
-  "version": "2.0.1",
+  "version": "2.2.1",
   "type": "module",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "compile": "bun build --compile --production src/index.ts --outfile dist/demo",
+    "lint": "bunx biome check src/",
+    "lint:fix": "bunx biome check src/ --fix"
+  },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.7.2 || ^6.0.0"
+    "typescript": "^5.8.2"
   },
   "dependencies": {
-    "dayjs": "^1.11.13",
-    "hono": "^4.7.2",
-    "yaml": "^2.7.0",
-    "zod": "^4.0.0"
+    "zod": "^4.3.6"
   }
 }

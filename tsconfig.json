@@ -4,9 +4,6 @@
     "paths": {
       "@/*": [
         "src/*"
-      ],
-      "config/*": [
-        "config/*"
       ]
     },
     // Enable latest features
@@ -18,7 +15,6 @@
     "module": "ESNext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
     "allowJs": true,
     "typeRoots": [
       "./node_modules/@types"
