@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import type {RouteHandler} from '../../../core/types.ts';
 import Logger from '../../../utils/logger.ts';
 
 const logger = new Logger('ZodRoute');
@@ -8,7 +9,7 @@ const schema = z.object({
     number: z.coerce.string().optional()
 });
 
-export const POST = async ({req}) =>
+export const POST: RouteHandler = async ({req}) =>
 {
     let data: FormData;
     try

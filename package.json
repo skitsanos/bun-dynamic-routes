@@ -9,13 +9,11 @@
     "lint:fix": "bunx biome check src/ --fix"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.8",
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5.8.2 || ^6.0.0 || ^7.0.0"
+    "@biomejs/biome": "^2.5.5",
+    "@types/bun": "^1.3.14",
+    "typescript": "^7.0.2"
   },
   "dependencies": {
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   }
 }

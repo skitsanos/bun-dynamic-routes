@@ -1,4 +1,5 @@
 import {join} from 'node:path';
+import type {RouteHandler} from '../../core/types.ts';
 
 const isCompiled = process.execPath !== Bun.which('bun');
 const baseDir = isCompiled ? process.cwd() : new URL('../../..', import.meta.url).pathname;
@@ -65,7 +66,7 @@ ${content}
 </body>
 </html>`;
 
-export const GET = async ({params}) =>
+export const GET: RouteHandler = async ({params}) =>
 {
     const slug = params.slug || 'readme';
     const safePath = slug.replace(/[^a-zA-Z0-9_\-/]/g, '');

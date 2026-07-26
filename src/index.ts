@@ -1,5 +1,13 @@
 import {join} from 'node:path';
 import config from '@/core/configuration.ts';
+import {
+    ALLOWED_METHODS,
+    type RouteContext,
+    type RouteMethod,
+    type RouteModule,
+    type RouteWebSocketHandler,
+    type SocketData
+} from '@/core/types.ts';
 import {applyCorsHeaders, handleCors} from '@/utils/cors.ts';
 import Logger, {LogLevel} from '@/utils/logger.ts';
 import {serveStatic} from '@/utils/staticFiles.ts';
@@ -17,45 +25,6 @@ const {
 } = process.env;
 
 logger.trace('Starting server...');
-
-type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
-const ALLOWED_METHODS: RouteMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-
-type RouteHandler = (context: RouteContext) => Promise<Response | undefined> | Response | undefined;
-
-interface RouteModule {
-    GET?: RouteHandler;
-    POST?: RouteHandler;
-    PUT?: RouteHandler;
-    PATCH?: RouteHandler;
-    DELETE?: RouteHandler;
-    HEAD?: RouteHandler;
-    OPTIONS?: RouteHandler;
-    default?: RouteHandler;
-    websocket?: RouteWebSocketHandler;
-}
-
-interface RouteContext {
-    req: Request;
-    params: Record<string, string>;
-    query: Record<string, string>;
-    pathname: string;
-    server: Bun.Server<SocketData>;
-}
-
-type RouteWebSocketHandler = {
-    open?: (ws: any) => void | Promise<void>;
-    message: (ws: any, message: string | Buffer) => void | Promise<void>;
-    close?: (ws: any, code: number, reason: string) => void | Promise<void>;
-    error?: (ws: any, error: Error) => void | Promise<void>;
-};
-
-type SocketData = {
-    websocket?: RouteWebSocketHandler;
-    pathname: string;
-    query: Record<string, string>;
-    params: Record<string, string>;
-};
 
 const routesDirectory = isCompiled ? join(process.cwd(), 'src', 'routes') : new URL('./routes', import.meta.url).pathname;
 

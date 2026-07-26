@@ -1,4 +1,5 @@
-export const GET = ({params}) =>
+import type {RouteHandler} from '../../../../core/types.ts';
+export const GET: RouteHandler = ({params}) =>
 {
     if (!params.userId)
     {

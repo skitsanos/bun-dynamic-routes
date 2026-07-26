@@ -1,4 +1,5 @@
-export const POST = async ({req}) =>
+import type {RouteHandler} from '../../../core/types.ts';
+export const POST: RouteHandler = async ({req}) =>
 {
     const contentType = req.headers.get('content-type') ?? '';
     const invalid = 'Invalid!';

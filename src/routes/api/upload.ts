@@ -1,4 +1,5 @@
 import {basename, join, resolve, sep} from 'node:path';
+import type {RouteHandler} from '../../core/types.ts';
 import Logger from '../../utils/logger.ts';
 
 const logger = new Logger('Upload');
@@ -21,7 +22,7 @@ const safeFileName = (rawName: string): string =>
     return withoutLeadingDots.length > 0 ? withoutLeadingDots.slice(0, 128) : 'file';
 };
 
-export const POST = async ({req}) =>
+export const POST: RouteHandler = async ({req}) =>
 {
     const startedAt = Bun.nanoseconds();
     logger.trace('Uploading file...');

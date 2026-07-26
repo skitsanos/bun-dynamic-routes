@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
+    // TypeScript 7 removed `baseUrl`; path mappings must now be relative.
     "paths": {
       "@/*": [
-        "src/*"
+        "./src/*"
       ]
     },
     // Enable latest features
