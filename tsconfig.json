@@ -9,7 +9,10 @@
     // Enable latest features
     "lib": [
       "ESNext",
-      "DOM"
+      "DOM",
+      // Provides the iterator declarations for Headers/FormData/URLSearchParams
+      // (.entries(), .keys(), .values()) - without it `headers.entries()` fails to typecheck.
+      "DOM.Iterable"
     ],
     "target": "ESNext",
     "module": "ESNext",

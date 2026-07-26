@@ -171,3 +171,6 @@ dist
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Uploaded files (see src/routes/api/upload.ts)
+uploads/

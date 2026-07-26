@@ -27,17 +27,42 @@ const colorize = (text: string, color: string): string =>
     return ansi ? `${ansi}${text}\x1b[0m` : text;
 };
 
+/**
+ * Errors carry their useful fields on non-enumerable properties, so a plain
+ * `JSON.stringify({error})` yields `{"error":{}}` and silently loses everything.
+ * Convert them to a serializable shape instead, following the `cause` chain.
+ */
+const serializeError = (error: Error): Record<string, unknown> =>
+{
+    const serialized: Record<string, unknown> = {
+        name: error.name,
+        message: error.message
+    };
+
+    if (error.stack)
+    {
+        serialized.stack = error.stack;
+    }
+
+    if (error.cause !== undefined)
+    {
+        serialized.cause = error.cause instanceof Error ? serializeError(error.cause) : error.cause;
+    }
+
+    return serialized;
+};
+
 const stringify = (value: unknown): string =>
 {
     if (value instanceof Error)
     {
-        return `${value.name}: ${value.message}`;
+        return value.stack ?? `${value.name}: ${value.message}`;
     }
     if (typeof value === 'object' && value !== null)
     {
         try
         {
-            return JSON.stringify(value);
+            return JSON.stringify(value, (_key, nested) => nested instanceof Error ? serializeError(nested) : nested);
         }
         catch
         {

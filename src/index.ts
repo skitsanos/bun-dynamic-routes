@@ -121,10 +121,76 @@ const isRouteMethod = (method: string): method is RouteMethod =>
     return ALLOWED_METHODS.includes(method as RouteMethod);
 };
 
+const isWellFormedPath = (pathname: string): boolean =>
+{
+    try
+    {
+        decodeURIComponent(pathname);
+        return true;
+    }
+    catch
+    {
+        return false;
+    }
+};
+
 const getAllowedMethods = (route: RouteModule): RouteMethod[] =>
 {
     const allowed = ALLOWED_METHODS.filter((method) => route[method]);
     return allowed.length > 0 ? allowed : (route.default ? ALLOWED_METHODS : []);
+};
+
+type MatchedRoute = NonNullable<ReturnType<typeof fileRouter.match>>;
+
+const resolveRoute = async (
+    request: Request,
+    server: Bun.Server<SocketData>,
+    matched: MatchedRoute
+): Promise<Response> =>
+{
+    const route = await loadRouteModule(matched.filePath);
+    const context: RouteContext = {
+        req: request,
+        pathname: matched.pathname,
+        query: matched.query ?? {},
+        params: matched.params ?? {},
+        server
+    };
+    const method = request.method.toUpperCase();
+
+    const isWebSocketUpgrade = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
+    if (isWebSocketUpgrade && method === 'GET' && route.websocket)
+    {
+        const upgrade = server.upgrade(request, {
+            data: {
+                websocket: route.websocket,
+                pathname: context.pathname,
+                query: context.query,
+                params: context.params
+            }
+        });
+
+        return upgrade
+            ? new Response(null, {status: 101})
+            : createResponse('WebSocket upgrade failed', 400);
+    }
+
+    const handler = isRouteMethod(method)
+        ? route[method]
+        : undefined;
+    const routeHandler = handler ?? route.default;
+
+    if (!routeHandler)
+    {
+        const allowed = getAllowedMethods(route);
+
+        return createResponse(`Method ${method} Not Allowed`, 405, {
+            'Content-Type': 'text/plain',
+            Allow: allowed.length > 0 ? allowed.join(', ') : 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS'
+        });
+    }
+
+    return await routeHandler(context) ?? createResponse('', 204);
 };
 
 const requestHandler = async (request: Request, server: Bun.Server<SocketData>) =>
@@ -139,81 +205,42 @@ const requestHandler = async (request: Request, server: Bun.Server<SocketData>) 
         return preflightResponse;
     }
 
-    // Serve static files from public/
-    if (request.method === 'GET' || request.method === 'HEAD')
-    {
-        const staticResponse = await serveStatic(requestUrl.pathname, publicDir);
-        if (staticResponse)
-        {
-            return staticResponse;
-        }
-    }
-
     let matchedRoute: string | null = null;
     let response: Response | undefined;
-    let matched: ReturnType<typeof fileRouter.match> | null = null;
 
     try
     {
-        matched = fileRouter.match(request);
-
-        if (!matched)
+        if (!isWellFormedPath(requestUrl.pathname))
         {
-            response = createResponse('Not Found', 404, {'Content-Type': 'text/plain'});
+            // Both decodeURIComponent and fileRouter.match throw on malformed
+            // percent-encoding. That is a client mistake, not a server fault.
+            response = createResponse('Bad Request', 400, {'Content-Type': 'text/plain'});
         }
-        else
+        else if (request.method === 'GET' || request.method === 'HEAD')
         {
-            matchedRoute = matched.filePath;
-            const route = await loadRouteModule(matched.filePath);
-            const context: RouteContext = {
-                req: request,
-                pathname: matched.pathname,
-                query: matched.query ?? {},
-                params: matched.params ?? {},
-                server
-            };
-            const method = request.method.toUpperCase();
+            // Static files from public/ fall through to the shared response pipeline
+            // below, so they pick up CORS, timing and access logging just like routes.
+            const staticResponse = await serveStatic(requestUrl.pathname, publicDir);
 
-            const isWebSocketUpgrade = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
-            if (isWebSocketUpgrade && method === 'GET' && route.websocket)
+            if (staticResponse)
             {
-                const upgrade = server.upgrade(request, {
-                    data: {
-                        websocket: route.websocket,
-                        pathname: context.pathname,
-                        query: context.query,
-                        params: context.params
-                    }
-                });
+                matchedRoute = 'static';
+                response = staticResponse;
+            }
+        }
 
-                response = upgrade
-                    ? new Response(null, {status: 101})
-                    : createResponse('WebSocket upgrade failed', 400);
+        if (!response)
+        {
+            const matched = fileRouter.match(request);
+
+            if (matched)
+            {
+                matchedRoute = matched.filePath;
+                response = await resolveRoute(request, server, matched);
             }
             else
             {
-                const handler = isRouteMethod(method)
-                    ? route[method]
-                    : undefined;
-                const routeHandler = handler ?? route.default;
-
-                if (!routeHandler)
-                {
-                    const allowed = getAllowedMethods(route);
-                    response = createResponse(`Method ${method} Not Allowed`, 405, {
-                        'Content-Type': 'text/plain',
-                        Allow: allowed.length > 0 ? allowed.join(', ') : 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS'
-                    });
-                }
-                else
-                {
-                    response = await routeHandler(context);
-
-                    if (!response)
-                    {
-                        response = createResponse('', 204);
-                    }
-                }
+                response = createResponse('Not Found', 404, {'Content-Type': 'text/plain'});
             }
         }
     }
