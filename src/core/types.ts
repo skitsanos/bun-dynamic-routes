@@ -3,6 +3,13 @@
  *
  * Kept in their own module rather than in `src/index.ts` so route files can import
  * them without pulling in (and executing) the server entrypoint.
+ *
+ * NOTE for route authors: files under `src/routes/` must import this (and anything
+ * else) with *relative* specifiers, not the `@/` alias. Routes are loaded through a
+ * runtime `import()`, and a `bun build --compile` binary does not consult
+ * tsconfig `paths` for those - the alias resolves under `bun run` but makes every
+ * route fail to load in the compiled binary. Modules reachable from `src/index.ts`
+ * are bundled at build time and may use `@/` freely.
  */
 
 export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';

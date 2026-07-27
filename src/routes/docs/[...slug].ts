@@ -1,9 +1,8 @@
 import {join} from 'node:path';
 import type {RouteHandler} from '../../core/types.ts';
+import {publicDir} from '../../utils/runtime.ts';
 
-const isCompiled = process.execPath !== Bun.which('bun');
-const baseDir = isCompiled ? process.cwd() : new URL('../../..', import.meta.url).pathname;
-const docsDir = join(baseDir, 'public', 'docs');
+const docsDir = join(publicDir, 'docs');
 
 const renderPage = (content: string, title: string) => `<!doctype html>
 <html lang="en">

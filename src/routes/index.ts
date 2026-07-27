@@ -1,4 +1,5 @@
-export const GET = () =>
+import type {RouteHandler} from '../core/types.ts';
+export const GET: RouteHandler = () =>
 {
     const html = `<!doctype html>
 <html lang="en">

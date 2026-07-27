@@ -1,9 +1,10 @@
 import {join} from 'node:path';
+import type {RouteHandler} from '../core/types.ts';
+import {publicDir} from '../utils/runtime.ts';
 
-const isCompiled = process.execPath !== Bun.which('bun');
-const baseDir = isCompiled ? process.cwd() : new URL('../..', import.meta.url).pathname;
-
-export const GET = () =>
+export const GET: RouteHandler = () =>
 {
-    return new Response(Bun.file(join(baseDir, 'public', 'chat.html')));
+    return new Response(Bun.file(join(publicDir, 'chat.html')), {
+        headers: {'Content-Type': 'text/html'}
+    });
 };

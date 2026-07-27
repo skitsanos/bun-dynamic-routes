@@ -21,6 +21,33 @@ const LEVEL_COLORS: Record<string, string> = {
     FATAL: 'darkred'
 };
 
+/**
+ * Default level for every logger that does not request one explicitly.
+ *
+ * Read from LOG_LEVEL so route modules constructing their own `new Logger('X')`
+ * share the process-wide level instead of silently defaulting to INFO and
+ * discarding their own trace/debug output.
+ *
+ * Deliberately sourced from the environment rather than `core/configuration` to
+ * keep this module dependency-free - configuration imports the logger.
+ */
+const resolveDefaultLevel = (): LogLevel =>
+{
+    const configured = process.env.LOG_LEVEL?.toUpperCase();
+
+    return configured && configured in LogLevel
+        ? LogLevel[configured as keyof typeof LogLevel]
+        : LogLevel.INFO;
+};
+
+let defaultLevel: LogLevel = resolveDefaultLevel();
+
+/** Lets the entrypoint apply the level from config/server.yaml once it is parsed. */
+export const setDefaultLogLevel = (level: LogLevel): void =>
+{
+    defaultLevel = level;
+};
+
 const colorize = (text: string, color: string): string =>
 {
     const ansi = Bun.color(color, 'ansi');
@@ -75,17 +102,18 @@ const stringify = (value: unknown): string =>
 export class Logger
 {
     private readonly context: string;
-    private readonly level: LogLevel;
+    private readonly level: LogLevel | null;
 
-    constructor(context: string, level: LogLevel = LogLevel.INFO)
+    /** Omit `level` to follow the process-wide default (see `setDefaultLogLevel`). */
+    constructor(context: string, level?: LogLevel)
     {
         this.context = context;
-        this.level = level;
+        this.level = level ?? null;
     }
 
     private log(level: LogLevel, message: unknown, ...args: unknown[]): void
     {
-        if (level < this.level)
+        if (level < (this.level ?? defaultLevel))
         {
             return;
         }

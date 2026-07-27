@@ -1,4 +1,3 @@
-import {join} from 'node:path';
 import config from '@/core/configuration.ts';
 import {
     ALLOWED_METHODS,
@@ -9,32 +8,33 @@ import {
     type SocketData
 } from '@/core/types.ts';
 import {applyCorsHeaders, handleCors} from '@/utils/cors.ts';
-import Logger, {LogLevel} from '@/utils/logger.ts';
+import Logger, {LogLevel, setDefaultLogLevel} from '@/utils/logger.ts';
+import {isDevelopment, publicDir, routesDir} from '@/utils/runtime.ts';
 import {serveStatic} from '@/utils/staticFiles.ts';
 
-const isCompiled = process.execPath !== Bun.which('bun');
-const baseDir = isCompiled ? process.cwd() : new URL('..', import.meta.url).pathname;
-const publicDir = join(baseDir, 'public');
+// Precedence: LOG_LEVEL env var (already picked up by the logger) beats
+// config/server.yaml, so only apply the file value when the env var is absent.
+if (!process.env.LOG_LEVEL)
+{
+    setDefaultLogLevel(LogLevel[config.logLevel]);
+}
 
-const logger = new Logger('Core', LogLevel.TRACE);
-const loggerHttp = new Logger('HTTP', LogLevel.TRACE);
+const logger = new Logger('Core');
+const loggerHttp = new Logger('HTTP');
 
 const {
     SERVER_NAME,
     PORT
 } = process.env;
 
-logger.trace('Starting server...');
-
-const routesDirectory = isCompiled ? join(process.cwd(), 'src', 'routes') : new URL('./routes', import.meta.url).pathname;
+logger.debug('Starting server...');
 
 const fileRouter = new Bun.FileSystemRouter({
     style: 'nextjs',
-    dir: routesDirectory,
+    dir: routesDir,
     fileExtensions: ['.ts', '.tsx']
 });
 
-const routeModules = new Map<string, RouteModule>();
 const websocketHandlers: RouteWebSocketHandler = {
     open: (ws) =>
     {
@@ -58,26 +58,71 @@ const websocketHandlers: RouteWebSocketHandler = {
     }
 };
 
+/**
+ * No local cache here on purpose: the ESM registry already memoises modules, and a
+ * `Map` kept stale references alive across `bun --hot` reloads.
+ */
 const loadRouteModule = async (filePath: string): Promise<RouteModule> =>
+    await import(filePath) as RouteModule;
+
+/**
+ * Imports every route once at boot so a broken route file fails immediately and
+ * loudly, instead of surfacing as a 500 on whichever request happens to hit it
+ * first. Also warms the module registry so the first request is not penalised.
+ */
+const preloadRoutes = async (): Promise<void> =>
 {
-    const cached = routeModules.get(filePath);
-    if (cached)
+    const entries = Object.entries(fileRouter.routes);
+    const failures: string[] = [];
+
+    await Promise.all(entries.map(async ([routePath, filePath]) =>
     {
-        return cached;
+        try
+        {
+            const routeModule = await loadRouteModule(filePath);
+            const handlers = getAllowedMethods(routeModule);
+
+            if (handlers.length === 0 && !routeModule.websocket)
+            {
+                logger.warn(`Route ${routePath} exports no handler and will always 405`, {file: filePath});
+            }
+        }
+        catch (error)
+        {
+            failures.push(routePath);
+            logger.error(`Failed to load route ${routePath}`, {file: filePath, error});
+        }
+    }));
+
+    if (failures.length > 0)
+    {
+        logger.fatal(`${failures.length} route(s) failed to load`, {routes: failures});
+        process.exit(1);
     }
-    const routeModule = await import(filePath) as RouteModule;
-    routeModules.set(filePath, routeModule);
-    return routeModule;
+
+    logger.debug(`Loaded ${entries.length} route(s)`);
 };
 
 const createResponse = (body = '', status = 200, headers: HeadersInit = {}) => new Response(body, {status, headers});
 
-const getClientIp = (request: Request): string =>
+/**
+ * Forwarding headers are client-controlled, so they are only consulted when the
+ * deployment declares that it sits behind a proxy that rewrites them.
+ */
+const getClientIp = (request: Request, server: Bun.Server<SocketData>): string =>
 {
-    const xForwardedFor = request.headers.get('x-forwarded-for');
-    const forwardedIp = xForwardedFor?.split(',')[0]?.trim();
+    if (config.server.trustProxy)
+    {
+        const forwardedIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+        const realIp = forwardedIp || request.headers.get('x-real-ip');
 
-    return forwardedIp || request.headers.get('x-real-ip') || 'unknown';
+        if (realIp)
+        {
+            return realIp;
+        }
+    }
+
+    return server.requestIP(request)?.address ?? 'unknown';
 };
 
 const toMs = (nanoseconds: number): number =>
@@ -105,17 +150,31 @@ const isWellFormedPath = (pathname: string): boolean =>
 
 const getAllowedMethods = (route: RouteModule): RouteMethod[] =>
 {
-    const allowed = ALLOWED_METHODS.filter((method) => route[method]);
-    return allowed.length > 0 ? allowed : (route.default ? ALLOWED_METHODS : []);
+    const explicit = ALLOWED_METHODS.filter((method) => route[method]);
+    if (explicit.length > 0)
+    {
+        return explicit;
+    }
+
+    if (route.default)
+    {
+        return ALLOWED_METHODS;
+    }
+
+    // A websocket-only route does answer GET, but solely as an upgrade handshake.
+    return route.websocket ? ['GET'] : [];
 };
 
 type MatchedRoute = NonNullable<ReturnType<typeof fileRouter.match>>;
+
+/** The request became a WebSocket connection - Bun owns the socket, so no Response. */
+const UPGRADED = Symbol('upgraded');
 
 const resolveRoute = async (
     request: Request,
     server: Bun.Server<SocketData>,
     matched: MatchedRoute
-): Promise<Response> =>
+): Promise<Response | typeof UPGRADED> =>
 {
     const route = await loadRouteModule(matched.filePath);
     const context: RouteContext = {
@@ -139,9 +198,9 @@ const resolveRoute = async (
             }
         });
 
-        return upgrade
-            ? new Response(null, {status: 101})
-            : createResponse('WebSocket upgrade failed', 400);
+        // Bun takes ownership of the socket; returning a Response here is not the
+        // documented contract, so signal "no response" to the caller instead.
+        return upgrade ? UPGRADED : createResponse('WebSocket upgrade failed', 400);
     }
 
     const handler = isRouteMethod(method)
@@ -151,11 +210,24 @@ const resolveRoute = async (
 
     if (!routeHandler)
     {
+        // A plain request to a websocket-only route is a missing upgrade, not a
+        // wrong method - 426 says exactly that.
+        if (route.websocket && method === 'GET')
+        {
+            return createResponse('Upgrade Required', 426, {
+                'Content-Type': 'text/plain',
+                Upgrade: 'websocket',
+                Connection: 'Upgrade'
+            });
+        }
+
         const allowed = getAllowedMethods(route);
 
+        // Advertise only what the route genuinely serves - the old fallback listed
+        // every verb, which was actively misleading for websocket-only routes.
         return createResponse(`Method ${method} Not Allowed`, 405, {
             'Content-Type': 'text/plain',
-            Allow: allowed.length > 0 ? allowed.join(', ') : 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS'
+            Allow: allowed.join(', ')
         });
     }
 
@@ -166,6 +238,9 @@ const requestHandler = async (request: Request, server: Bun.Server<SocketData>) 
 {
     const start = Bun.nanoseconds();
     const requestUrl = new URL(request.url);
+    // Resolved up front: `server.requestIP()` returns null once a socket has been
+    // handed off to the WebSocket upgrade.
+    const clientIp = getClientIp(request, server);
 
     // Handle CORS preflight
     const preflightResponse = handleCors(request, config.server.cors);
@@ -176,6 +251,7 @@ const requestHandler = async (request: Request, server: Bun.Server<SocketData>) 
 
     let matchedRoute: string | null = null;
     let response: Response | undefined;
+    let upgraded = false;
 
     try
     {
@@ -189,7 +265,11 @@ const requestHandler = async (request: Request, server: Bun.Server<SocketData>) 
         {
             // Static files from public/ fall through to the shared response pipeline
             // below, so they pick up CORS, timing and access logging just like routes.
-            const staticResponse = await serveStatic(requestUrl.pathname, publicDir);
+            const staticResponse = await serveStatic(
+                requestUrl.pathname,
+                publicDir,
+                request.headers.get('if-none-match')
+            );
 
             if (staticResponse)
             {
@@ -200,16 +280,34 @@ const requestHandler = async (request: Request, server: Bun.Server<SocketData>) 
 
         if (!response)
         {
-            const matched = fileRouter.match(request);
+            let matched = fileRouter.match(request);
 
-            if (matched)
+            // The router caches its file table at construction, so a route file added
+            // after startup never matches. Rescan once before giving up, which keeps
+            // `bun --hot` usable without paying for a directory scan on every request.
+            if (!matched && isDevelopment)
             {
-                matchedRoute = matched.filePath;
-                response = await resolveRoute(request, server, matched);
+                fileRouter.reload();
+                matched = fileRouter.match(request);
+            }
+
+            if (!matched)
+            {
+                response = createResponse('Not Found', 404, {'Content-Type': 'text/plain'});
             }
             else
             {
-                response = createResponse('Not Found', 404, {'Content-Type': 'text/plain'});
+                matchedRoute = matched.filePath;
+                const resolved = await resolveRoute(request, server, matched);
+
+                if (resolved === UPGRADED)
+                {
+                    upgraded = true;
+                }
+                else
+                {
+                    response = resolved;
+                }
             }
         }
     }
@@ -223,40 +321,103 @@ const requestHandler = async (request: Request, server: Bun.Server<SocketData>) 
         response = createResponse('Internal Server Error', 500);
     }
 
-    const end = Bun.nanoseconds();
-    const duration = toMs(end - start);
-    if (request.headers.get('upgrade')?.toLowerCase() === 'websocket' && response?.status === 101)
+    const duration = toMs(Bun.nanoseconds() - start);
+
+    if (upgraded)
     {
-        return response;
+        loggerHttp.debug(`WS ${requestUrl.pathname}`, {
+            status: 101,
+            clientIp,
+            route: matchedRoute
+        });
+
+        return undefined;
     }
 
     const finalResponse = response ?? createResponse('Internal Server Error', 500);
 
-    finalResponse.headers.set('X-Response-Time', `${duration.toFixed(3)}`);
+    finalResponse.headers.set('X-Response-Time', `${duration.toFixed(3)}ms`);
     finalResponse.headers.set('Server', (SERVER_NAME ?? config?.serviceName) || 'bun-service');
     applyCorsHeaders(finalResponse, request, config.server.cors);
+
     const logLevel = finalResponse.status >= 500 ? 'error'
         : finalResponse.status >= 400 ? 'warn'
             : 'trace';
     loggerHttp[logLevel](`${request.method} ${requestUrl.pathname}`, {
         status: finalResponse.status,
         durationMs: duration.toFixed(3),
-        clientIp: getClientIp(request),
+        clientIp,
         route: matchedRoute
     });
 
     return finalResponse;
 };
 
+// `Number(PORT) || fallback` swallowed PORT=0, which is the documented way to ask
+// the OS for an ephemeral port.
+const resolvePort = (): number =>
+{
+    if (PORT === undefined || PORT.trim() === '')
+    {
+        return config.server.port;
+    }
+
+    const parsed = Number(PORT);
+
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535)
+    {
+        logger.fatal(`Invalid PORT: ${PORT}`);
+        process.exit(1);
+    }
+
+    return parsed;
+};
+
+await preloadRoutes();
+
 const server = Bun.serve({
-    port: Number(PORT) || config.server.port || 3000,
+    port: resolvePort(),
     ...config.server.ssl && {
         cert: config.server.ssl.cert,
         key: config.server.ssl.key
     },
-    maxRequestBodySize: 50 * 1024 * 1024, // 50MB
+    maxRequestBodySize: config.server.maxRequestBodySize,
     fetch: requestHandler,
     websocket: websocketHandlers
 });
 
-logger.trace(`Server started at ${server.url}`, {url: server.url});
+logger.info(`Server started at ${server.url}`, {url: server.url});
+
+/**
+ * Stop accepting connections and let in-flight requests finish before exiting,
+ * so orchestrators (Docker, Kubernetes) get a clean shutdown instead of a kill.
+ */
+let shuttingDown = false;
+
+const shutdown = async (signal: string): Promise<void> =>
+{
+    if (shuttingDown)
+    {
+        return;
+    }
+    shuttingDown = true;
+
+    logger.info(`Received ${signal}, shutting down...`);
+
+    try
+    {
+        await server.stop();
+        logger.info('Server stopped');
+        process.exit(0);
+    }
+    catch (error)
+    {
+        logger.error('Error during shutdown', {error});
+        process.exit(1);
+    }
+};
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const)
+{
+    process.on(signal, () => void shutdown(signal));
+}

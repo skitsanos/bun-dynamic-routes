@@ -23,8 +23,14 @@ const sslSchema = z.object({
 // so an omitted `server:` block would leave `port` undefined instead of 3000.
 const appConfigSchema = z.object({
     serviceName: z.string().min(1).default('bun-service'),
+    logLevel: z.enum(['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']).default('INFO'),
     server: z.object({
         port: z.number().int().min(0).max(65535).default(3000),
+        // 50MB
+        maxRequestBodySize: z.number().int().positive().default(50 * 1024 * 1024),
+        // `x-forwarded-for` is trivially spoofable, so only believe it when the
+        // deployment actually sits behind a proxy that rewrites it.
+        trustProxy: z.boolean().default(false),
         cors: corsSchema.optional(),
         ssl: sslSchema.optional()
     }).prefault({})

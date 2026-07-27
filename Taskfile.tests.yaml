@@ -2,6 +2,11 @@ version: 3
 
 silent: true
 
+vars:
+  # Kept comfortably under `server.maxRequestBodySize` (50MB by default). The old
+  # 1000MB file could never pass - the server rejected it before the assertion.
+  UPLOAD_MB: 8
+
 tasks:
   default:
     desc: Run tests
@@ -16,52 +21,94 @@ tasks:
       - |
         echo "
         GET http://localhost:{{.PORT}}/
+        HTTP 200
+
+        GET http://localhost:{{.PORT}}/api/health
+        HTTP 200
+
+        GET http://localhost:{{.PORT}}/api/version
+        HTTP 200
+
+        GET http://localhost:{{.PORT}}/api/users/u42
+        HTTP 200
+
+        GET http://localhost:{{.PORT}}/docs/readme
+        HTTP 200
+
+        GET http://localhost:{{.PORT}}/assets/css/style.css
+        HTTP 200
         " | hurl --test
       - |
+        # Config must never expose TLS key/cert material
         echo "
-        POST http://localhost:{{.PORT}}/api/validate/hono
+        GET http://localhost:{{.PORT}}/api/config
+        HTTP 200
+        [Asserts]
+        jsonpath \"\$.server.ssl.key\" not exists
+        jsonpath \"\$.server.ssl.cert\" not exists
+        " | hurl --test
+      - |
+        # Unknown route, malformed percent-encoding, websocket-only route
+        echo "
+        GET http://localhost:{{.PORT}}/does-not-exist
+        HTTP 404
+
+        GET http://localhost:{{.PORT}}/%ZZ
+        HTTP 400
+
+        GET http://localhost:{{.PORT}}/api/chat/ws
+        HTTP 426
+        " | hurl --test
+      - |
+        # Validators reject empty/!invalid payloads
+        echo "
+        POST http://localhost:{{.PORT}}/api/validate/form
+        HTTP 400
+
+        POST http://localhost:{{.PORT}}/api/validate/zod
         HTTP 400
         " | hurl --test
-
       - |
         echo "
         POST http://localhost:{{.PORT}}/api/validate/zod
         [FormParams]
-        default: false
         email: john.doe@nowhere.local
         number: 33611223344
-        
+
         HTTP 200
         " | hurl --test
-
-      - echo "Generating random test file..."
+      - echo "Generating random test file ({{.UPLOAD_MB}}MB)..."
       - cmd: |
-          dd if=/dev/urandom of=random_file bs=1M count=1000
+          dd if=/dev/urandom of=random_file bs=1M count={{.UPLOAD_MB}} 2>/dev/null
         platforms:
           - linux
           - darwin
       - cmd: |
-          e$out = new-object byte[] (100MB)
+          $out = new-object byte[] ({{.UPLOAD_MB}}MB)
           (new-object Random).NextBytes($out)
           [IO.File]::WriteAllBytes("random_file", $out)
         platforms:
           - windows
       - |
+        # Uploads land under uploads/ with a sanitized name
         echo "
         POST http://localhost:{{.PORT}}/api/upload
         [MultipartFormData]
         file: file,random_file; application/octet-stream
-        
+
         HTTP 200
+        [Asserts]
+        jsonpath \"\$.success\" == true
+        jsonpath \"\$.fileName\" not contains \"..\"
+        jsonpath \"\$.fileName\" not contains \"/\"
         " | hurl --test
-        du -h random_file
       - cmd: |
-          rm random_file
-          rm uploaded_*
+          rm -f random_file
+          rm -rf uploads
         platforms:
           - linux
           - darwin
       - cmd: |
-          powershell -Command "Remove-Item random_file"
+          powershell -Command "Remove-Item random_file -ErrorAction SilentlyContinue; Remove-Item uploads -Recurse -Force -ErrorAction SilentlyContinue"
         platforms:
           - windows

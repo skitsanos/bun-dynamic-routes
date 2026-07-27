@@ -1,5 +1,15 @@
+# Validated at boot against the schema in src/core/configuration.ts.
+# Every key is optional - omitted values fall back to the defaults shown here.
+
+# TRACE | DEBUG | INFO | WARN | ERROR | FATAL. Overridden by the LOG_LEVEL env var.
+logLevel: TRACE
+
 server:
   port: 3000
+  # Reject request bodies larger than this (bytes). Default 50MB.
+  maxRequestBodySize: 52428800
+  # Only enable behind a proxy that rewrites x-forwarded-for; it is client-spoofable.
+  trustProxy: false
   cors:
     enabled: true
     allowedOrigins: ["http://localhost:3000"]

@@ -55,12 +55,14 @@ Open `http://localhost:3000` — try `/chat` for WebSocket demo, `/docs/readme` 
 src/
   index.ts                      # Server bootstrap + request handler
   core/
-    configuration.ts            # Config types + defaults
+    configuration.ts            # Zod-validated config (fails fast at boot)
+    types.ts                    # Route contracts (RouteHandler, RouteContext, ...)
   utils/
     loadConfig.ts               # YAML config loader (Bun.file + YAML.parse)
     logger.ts                   # Simple Bun-native logger
     cors.ts                     # CORS middleware
     staticFiles.ts              # Static file serving from public/
+    runtime.ts                  # Compiled-binary detection + resolved paths
   routes/
     index.ts                    # GET /
     chat.ts                     # GET /chat (serves public/chat.html)
@@ -86,11 +88,16 @@ public/
 
 ## Configuration
 
-The server loads `config/server.yaml` at startup. If the file is missing, defaults apply (`port: 3000`, no CORS).
+The server loads `config/server.yaml` at startup and validates it against a Zod schema. Every key is optional — omitted values fall back to the defaults below. Invalid values (wrong type, out-of-range port) abort startup with a per-field error rather than failing later at request time.
 
 ```yaml
+# TRACE | DEBUG | INFO | WARN | ERROR | FATAL
+logLevel: TRACE
+
 server:
   port: 3000
+  maxRequestBodySize: 52428800   # 50MB
+  trustProxy: false              # only enable behind a proxy that rewrites x-forwarded-for
   cors:
     enabled: true
     allowedOrigins: ["http://localhost:3000"]
@@ -100,6 +107,16 @@ server:
     allowCredentials: true
     maxAge: 300
 ```
+
+### Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `PORT` | Overrides `server.port`. `0` binds an ephemeral port. |
+| `LOG_LEVEL` | Overrides `logLevel`. Takes precedence over the YAML file. |
+| `SERVER_NAME` | Value sent in the `Server` response header. |
+
+Uploads are written to `uploads/` with sanitized filenames; the directory is git-ignored.
 
 ## Compiled Mode
 

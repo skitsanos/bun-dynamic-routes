@@ -1,1 +1,2 @@
-export const GET = () => Response.redirect('/docs/readme', 302);
+import type {RouteHandler} from '../../core/types.ts';
+export const GET: RouteHandler = () => Response.redirect('/docs/readme', 302);

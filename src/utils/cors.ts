@@ -57,6 +57,13 @@ export const applyCorsHeaders = (response: Response, request: Request, cors?: Co
     const headers = corsHeaders(origin, cors);
     for (const [key, value] of headers.entries())
     {
+        // Vary is additive - a handler may already vary on something else.
+        if (key.toLowerCase() === 'vary')
+        {
+            response.headers.append(key, value);
+            continue;
+        }
+
         response.headers.set(key, value);
     }
 };
@@ -64,9 +71,20 @@ export const applyCorsHeaders = (response: Response, request: Request, cors?: Co
 const corsHeaders = (origin: string, cors: CorsConfig): Headers =>
 {
     const headers = new Headers();
-    headers.set('Access-Control-Allow-Origin', cors.allowedOrigins.includes('*') ? '*' : origin);
+
+    // Browsers reject `Allow-Origin: *` together with `Allow-Credentials: true`,
+    // so reflect the concrete origin when credentials are in play.
+    const isWildcard = cors.allowedOrigins.includes('*') && !cors.allowCredentials;
+
+    headers.set('Access-Control-Allow-Origin', isWildcard ? '*' : origin);
     headers.set('Access-Control-Allow-Methods', cors.allowedMethods.join(', '));
     headers.set('Access-Control-Allow-Headers', cors.allowedHeaders.join(', '));
+
+    // Whenever the response varies by request origin, caches must key on it too.
+    if (!isWildcard)
+    {
+        headers.set('Vary', 'Origin');
+    }
 
     if (cors.exposedHeaders.length > 0)
     {

@@ -1,0 +1,27 @@
+# Dependencies are installed inside the image
+node_modules
+
+# VCS and tooling
+.git
+.gitignore
+.github
+.idea
+.vscode
+
+# Build output and local artefacts
+dist
+uploads
+*.log
+
+# Local environment
+.env
+.env.*
+
+# Docs and task definitions not needed at runtime
+README.md
+Taskfile.yaml
+Taskfile.tests.yaml
+renovate.json
+
+# OS noise
+.DS_Store

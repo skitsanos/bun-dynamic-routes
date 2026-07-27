@@ -30,7 +30,11 @@ const MIME_TYPES: Record<string, string> = {
  * Serves static files from the given directory.
  * Returns a Response if the file exists, or null to pass through to routing.
  */
-export const serveStatic = async (pathname: string, publicDir: string): Promise<Response | null> =>
+export const serveStatic = async (
+    pathname: string,
+    publicDir: string,
+    ifNoneMatch?: string | null
+): Promise<Response | null> =>
 {
     // URL pathnames arrive percent-encoded, so decode before touching the filesystem -
     // otherwise a file such as `my style.css` is unreachable via `/my%20style.css`.
@@ -69,10 +73,26 @@ export const serveStatic = async (pathname: string, publicDir: string): Promise<
     const ext = extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] ?? 'application/octet-stream';
 
-    return new Response(file, {
-        headers: {
-            'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=3600'
-        }
-    });
+    // HTML is the entrypoint that references fingerprinted assets, so it must be
+    // revalidated rather than held for an hour.
+    const cacheControl = ext === '.html'
+        ? 'public, max-age=0, must-revalidate'
+        : 'public, max-age=3600';
+
+    // Weak validator derived from size + mtime - enough for conditional requests
+    // without reading the file to hash it.
+    const etag = `W/"${file.size.toString(16)}-${Math.floor(file.lastModified).toString(16)}"`;
+    const headers: HeadersInit = {
+        'Content-Type': contentType,
+        'Cache-Control': cacheControl,
+        ETag: etag,
+        'Last-Modified': new Date(file.lastModified).toUTCString()
+    };
+
+    if (ifNoneMatch?.split(',').some((candidate) => candidate.trim() === etag))
+    {
+        return new Response(null, {status: 304, headers});
+    }
+
+    return new Response(file, {headers});
 };
