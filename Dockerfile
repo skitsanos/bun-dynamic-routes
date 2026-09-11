@@ -1,6 +1,6 @@
 # Use the official Bun image
 # See all versions at https://hub.docker.com/r/oven/bun/tags
-FROM oven/bun:1 AS base
+FROM oven/bun:latest AS base
 WORKDIR /app
 
 # Install production dependencies only. The previous dev-dependency stage was

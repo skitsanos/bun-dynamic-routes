@@ -1,5 +1,6 @@
 import {join} from 'node:path';
 import type {RouteHandler} from '../../core/types.ts';
+import {containedFile} from '../../utils/files.ts';
 import {publicDir} from '../../utils/runtime.ts';
 
 const docsDir = join(publicDir, 'docs');
@@ -68,22 +69,19 @@ ${content}
 export const GET: RouteHandler = async ({params}) =>
 {
     const slug = params.slug || 'readme';
-    const safePath = slug.replace(/[^a-zA-Z0-9_\-/]/g, '');
-    const filePath = join(docsDir, `${safePath}.md`);
-
-    // Block traversal out of docs dir
-    if (!filePath.startsWith(docsDir))
+    if (!/^[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(slug))
     {
         return new Response('Not Found', {status: 404});
     }
 
-    const file = Bun.file(filePath);
-    if (!await file.exists())
+    const filePath = await containedFile(docsDir, `${slug}.md`);
+    if (!filePath)
     {
         return new Response('Not Found', {status: 404});
     }
 
-    const markdown = await file.text();
+    // This directory contains trusted, repository-owned documentation, never uploads.
+    const markdown = await Bun.file(filePath).text();
     const content = Bun.markdown.html(markdown, {
         tables: true,
         strikethrough: true,
@@ -92,7 +90,7 @@ export const GET: RouteHandler = async ({params}) =>
         headings: {ids: true}
     });
 
-    return new Response(renderPage(content, safePath), {
+    return new Response(renderPage(content, slug), {
         headers: {'Content-Type': 'text/html'}
     });
 };

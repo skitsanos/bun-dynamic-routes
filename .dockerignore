@@ -22,6 +22,11 @@ README.md
 Taskfile.yaml
 Taskfile.tests.yaml
 renovate.json
+AGENTS.md
+docs
+scripts
+tests
+skill
 
 # OS noise
 .DS_Store

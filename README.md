@@ -1,144 +1,98 @@
-# Bun File-System Router Demo
+# Bun File-System Router Template
 
-A template project showcasing Bun-native features for building web servers — no frameworks, no extra dependencies beyond what Bun provides.
+This repository is the source of truth for our Bun projects and the Bun Server skill. It uses Bun's Next.js-style `FileSystemRouter`, named HTTP method exports, YAML configuration validated with Zod, static files, Markdown docs, and per-route WebSockets. TypeScript runs directly; an optional compiled entrypoint is also supported.
 
-## What This Showcases
+## Start and verify
 
-| Feature | Bun API |
-|---------|---------|
-| File-system routing | `Bun.FileSystemRouter` (Next.js-style) |
-| WebSocket pub/sub | `ws.subscribe()` / `ws.publish()` via `Bun.serve({ websocket })` |
-| YAML config | `YAML.parse()` from `"bun"` + `Bun.file()` |
-| Static file serving | `Bun.file()` with zero-copy streaming |
-| Markdown rendering | `Bun.markdown.html()` with GFM extensions |
-| CORS | Config-driven, applied per-request |
-| Compiled binary | `bun build --compile` with runtime route loading |
-| Linting | Biome for lint + import sorting |
+Keep Bun current with regular user-run `bun upgrade`. This template does not require an exact Bun release, `packageManager`, or `engines` fields. Dependency versions remain in `bun.lock`; `@types/bun` is a development dependency, not a runtime-version gate.
 
-## Quick Start
-
-```bash
-bun install
+```sh
+bun install --frozen-lockfile
+bun run verify
 bun run dev
 ```
 
-Open `http://localhost:3000` — try `/chat` for WebSocket demo, `/docs/readme` for rendered Markdown.
+Open `http://localhost:3000`, `/chat`, or `/docs/readme`. After upgrading Bun or dependencies, rerun verification. CI uses current Bun on Linux and macOS; Docker uses `oven/bun:latest` and pulls the current image during verification.
 
-## Scripts
+| Command | Behavior |
+|---|---|
+| `bun run dev` / `task dev` | Source server with hot reload |
+| `bun run start` | Source server; set NODE_ENV=production for production |
+| `bun run check` / `task check` | Strict TypeScript, Biome, isolated regression tests |
+| `bun run verify` / `task verify` | Check plus the same regressions against a compiled executable |
+| `bun run test` / `task test` | Real HTTP/WebSocket/config/shutdown regressions in temporary applications |
+| `bun run test:hurl` / `task test:hurl` | Original 14-request smoke suite and 8 MiB upload in an isolated application; requires Hurl |
+| `bun run test:docker` / `task test:docker` | Build, Linux regressions, live container health/port/UID/upload/WebSocket shutdown; requires Docker |
+| `bun run compile` / `task compile` | Compile the entrypoint to `dist/demo` |
+| `bun run lint` / `bun run lint:fix` | Lint/import checks or reviewed fixes; formatter disabled |
 
-| Command | Description |
-|---------|-------------|
-| `bun run dev` | Start with hot reload |
-| `bun run compile` | Build standalone binary to `dist/demo` |
-| `bun run lint` | Run Biome linter |
-| `bun run lint:fix` | Auto-fix lint issues |
+Tests start their own servers on ephemeral ports and only delete temporary directories they create. They do not use a caller's `uploads/`, overwrite a caller's `random_file`, or require a prestarted application. See [verification and finding coverage](docs/verification.md).
 
-## Routes
+## Routes and handler contract
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/` | GET | Home page |
-| `/chat` | GET | WebSocket chat UI (static HTML via `Bun.file()`) |
-| `/docs/:slug` | GET | Markdown docs rendered with `Bun.markdown.html()` |
-| `/api/health` | GET | Health check (includes `binary: true/false`) |
-| `/api/version` | GET | Bun and package version |
-| `/api/config` | GET | Current server configuration |
-| `/api/users/:userId` | GET | Dynamic route params demo |
-| `/api/upload` | POST | File upload via `multipart/form-data` |
-| `/api/validate/zod` | POST | Zod schema validation |
-| `/api/validate/form` | POST | Form body validation |
-| `/api/chat/ws` | WS | WebSocket endpoint (pub/sub chat) |
+| File | URL / export |
+|---|---|
+| `src/routes/index.ts` | `/` — GET |
+| `src/routes/api/users/[userId]/index.ts` | `/api/users/:userId` — GET |
+| `src/routes/api/upload.ts` | `/api/upload` — POST |
+| `src/routes/docs/[...slug].ts` | `/docs/*` — GET |
+| `src/routes/api/chat/ws.ts` | `/api/chat/ws` — websocket |
 
-## Project Structure
+For example, in `src/routes/api/example.ts`:
 
-```
-src/
-  index.ts                      # Server bootstrap + request handler
-  core/
-    configuration.ts            # Zod-validated config (fails fast at boot)
-    types.ts                    # Route contracts (RouteHandler, RouteContext, ...)
-  utils/
-    loadConfig.ts               # YAML config loader (Bun.file + YAML.parse)
-    logger.ts                   # Simple Bun-native logger
-    cors.ts                     # CORS middleware
-    staticFiles.ts              # Static file serving from public/
-    runtime.ts                  # Compiled-binary detection + resolved paths
-  routes/
-    index.ts                    # GET /
-    chat.ts                     # GET /chat (serves public/chat.html)
-    docs/[...slug].ts           # GET /docs/* (markdown rendering)
-    api/
-      health.ts                 # GET /api/health
-      version.ts                # GET /api/version
-      config.ts                 # GET /api/config
-      upload.ts                 # POST /api/upload
-      chat/ws.ts                # WebSocket endpoint
-      users/[userId]/index.ts   # GET /api/users/:userId
-      validate/
-        form.ts                 # POST /api/validate/form
-        zod.ts                  # POST /api/validate/zod
-config/
-  server.yaml                   # Optional server config (CORS, port, SSL)
-public/
-  chat.html                     # Chat UI
-  assets/css/                   # Stylesheets
-  assets/js/                    # Client-side scripts
-  docs/                         # Markdown files (rendered at /docs/*)
+```ts
+import type {RouteHandler} from '../../core/types.ts';
+
+export const GET: RouteHandler = ({req, params, query, pathname}) =>
+    Response.json({method: req.method, params, query, pathname});
 ```
 
-## Configuration
+Use named GET, POST, PUT, PATCH, DELETE, HEAD, or OPTIONS exports. A default handler handles remaining standard methods. Relative imports in route modules also work when the entrypoint is compiled. There is no route-generation command or manifest.
 
-The server loads `config/server.yaml` at startup and validates it against a Zod schema. Every key is optional — omitted values fall back to the defaults below. Invalid values (wrong type, out-of-range port) abort startup with a per-field error rather than failing later at request time.
+`req` is a standard Request, not a native-route BunRequest. `params` contains path parameters; `query` contains search parameters, with repeated keys represented as arrays. Query keys do not replace path parameters. `pathname` excludes the query string. Use `Bun.CookieMap` to parse Cookie headers and explicitly add Set-Cookie response headers when needed.
 
-```yaml
-# TRACE | DEBUG | INFO | WARN | ERROR | FATAL
-logLevel: TRACE
+HEAD falls back to GET unless overridden, with Bun suppressing the body. Ordinary OPTIONS respects an explicit handler, otherwise returns 204. Unsupported methods return 405 with a truthful Allow header. Missing paths return 404, including CORS preflight requests. Existing route edits hot-reload; a new route is discovered on a development miss. Removing or renaming routes should be followed by a restart to refresh the complete route table.
 
-server:
-  port: 3000
-  maxRequestBodySize: 52428800   # 50MB
-  trustProxy: false              # only enable behind a proxy that rewrites x-forwarded-for
-  cors:
-    enabled: true
-    allowedOrigins: ["http://localhost:3000"]
-    allowedMethods: ["GET", "POST", "PUT", "DELETE"]
-    allowedHeaders: ["Content-Type", "Authorization"]
-    exposedHeaders: ["Authorization"]
-    allowCredentials: true
-    maxAge: 300
-```
+## WebSockets
 
-### Environment variables
+A `websocket` export must provide `upgrade(context)` and `message(socket, data)`. The guard returns `{accept: true, context?: {...}}` or `{accept: false, response: Response}`. Authenticate non-public sockets and validate the browser Origin in this guard: a GET handler or HTTP CORS settings do not authorize an upgrade. Missing guards fail startup; thrown/rejected guards never upgrade. Async lifecycle failures close the socket with 1011.
 
-| Variable | Effect |
-|----------|--------|
-| `PORT` | Overrides `server.port`. `0` binds an ephemeral port. |
-| `LOG_LEVEL` | Overrides `logLevel`. Takes precedence over the YAML file. |
-| `SERVER_NAME` | Value sent in the `Server` response header. |
+The chat example is explicitly public and accepts same-origin browser clients or clients without an Origin header. Names must be a single nonempty string up to 20 characters; chat messages are limited to 500 characters. The global dispatcher sets a 1 MiB payload/backpressure limit and 60-second idle timeout. Open sockets receive 1012 during shutdown.
 
-Uploads are written to `uploads/` with sanitized filenames; the directory is git-ignored.
+## Configuration and files
 
-## Compiled Mode
+`config/server.yaml` is optional and loaded relative to the working directory. Zod supplies nested defaults and rejects invalid values before binding. Run from the project root, including in compiled mode.
 
-```bash
+| Environment variable | Behavior |
+|---|---|
+| `PORT` | Overrides YAML port; digits only, 0–65535; 0 requests an ephemeral port |
+| `HOST` | Overrides hostname; default loopback in development, all interfaces in production |
+| `NODE_ENV` | development, test, or production |
+| `LOG_LEVEL` | TRACE, DEBUG, INFO, WARN, ERROR, FATAL; overrides YAML |
+| `SERVER_NAME` | Overrides the service response header; rejects control characters |
+| `SHUTDOWN_GRACE_PERIOD_MS` | Overrides the 5000 ms shutdown deadline; 0–60000 |
+
+YAML also configures CORS, `server.trustProxy` (default false), TLS PEM contents, and `server.maxRequestBodySize` (50 MiB). CORS is disabled when omitted; the example YAML allows `http://localhost:3000`. Wildcard origins with credentials are rejected. Forwarded client-IP headers are consulted only when proxy trust is explicitly enabled.
+
+Everything under `public/` is deliberately public. Canonical paths must remain inside the public root, including symlink targets; only regular files are served. The chat and Markdown loaders apply the same containment rule. Assets use revalidation caching, ETag/Last-Modified conditionals, preconditions, and Bun file ranges. Markdown files are trusted repository content, not an upload/CMS channel; sanitize untrusted Markdown before introducing such a channel.
+
+Uploads require multipart data. Each is saved under `uploads/` with a UUID-based filename and exclusive creation, so concurrent requests cannot replace existing files. Keep the dedicated upload directory separate from the public tree. The runtime rejects a symlinked upload directory.
+
+SIGTERM/SIGINT stop accepting connections, close tracked sockets, and allow in-flight HTTP requests to complete. At the configured deadline the process force-stops; give the orchestrator a longer grace period.
+
+## Compiled mode and Docker
+
+```sh
 bun run compile
 ./dist/demo
+task docker-build
+task docker-run
 ```
 
-The binary resolves `config/server.yaml`, `src/routes/`, and `public/` from `process.cwd()` at runtime. The `/api/health` endpoint reports `binary: true` when running as a compiled executable.
+The compiled executable bundles the entrypoint and its static imports. It is **not a self-contained distribution**: retain `src/` (including route helpers), `public/`, `package.json`, and production `node_modules/` in the working directory; retain optional config as needed. Dynamically imported routes read these files at runtime. `/api/health` reports compiled mode using `Bun.main.startsWith('/$bunfs')`.
 
-## Design Decisions
+Docker runs source directly as the unprivileged `bun` user, installs frozen production dependencies, and gives that user write access to `/app/uploads`. Set PORT to change the listener and healthcheck port. Mount durable upload storage when files must survive container replacement. TLS terminated inside the app requires an HTTPS-aware healthcheck configuration; the supplied Docker healthcheck targets the default HTTP deployment.
 
-### Why `FileSystemRouter` instead of `Bun.serve({ routes })`?
+## Skill synchronization
 
-Bun offers two routing approaches:
-
-- **`Bun.serve({ routes })`** — declarative, supports HTML imports with automatic JS/CSS bundling and HMR. Best for fullstack apps with React or other frontend frameworks.
-- **`Bun.FileSystemRouter`** — file-system based discovery with dynamic `import()`. Routes are added by convention (drop a file, get a route). Best for API-heavy projects and template starters.
-
-This project uses `FileSystemRouter` because it showcases the convention-over-configuration pattern — add a `.ts` file to `src/routes/` and it becomes a route automatically. The trade-off is that Bun's HTML import bundling (`import page from "./index.html"`) isn't available since that feature is tied to the `routes` object.
-
-### Route file conventions
-
-- Route files use **relative imports** (not `@/` aliases) because `FileSystemRouter` loads them via dynamic `import()` at runtime, bypassing the bundler's path resolution.
-- The `@/` alias is only used in `src/index.ts` which is processed by the bundler at compile time.
+Canonical skill instructions live in `skill/`; generated assets come from this repository. See [skill maintenance](docs/skill-maintenance.md) for the export, drift check, and independent generated-template validation. Edit this repository, verify it, then regenerate the installed skill. Do not maintain a second routing implementation in the installed assets.

@@ -8,6 +8,10 @@ server:
   port: 3000
   # Reject request bodies larger than this (bytes). Default 50MB.
   maxRequestBodySize: 52428800
+  # Allow in-flight requests to finish, then force termination at this deadline.
+  shutdownGracePeriodMs: 5000
+  # hostname defaults to loopback in development and 0.0.0.0 in production.
+  # Override with HOST or set hostname explicitly when LAN access is needed.
   # Only enable behind a proxy that rewrites x-forwarded-for; it is client-spoofable.
   trustProxy: false
   cors:

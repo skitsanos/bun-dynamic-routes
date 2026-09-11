@@ -1,105 +1,44 @@
 import type {CorsConfig} from '../core/configuration.ts';
+import type {RouteMethod} from '../core/types.ts';
 
-/**
- * Applies CORS headers to a response based on the request origin and config.
- * Returns a preflight response for OPTIONS requests, or null to continue.
- */
-export const handleCors = (request: Request, cors?: CorsConfig): Response | null =>
-{
-    if (!cors?.enabled)
-    {
-        return null;
-    }
-
-    const origin = request.headers.get('origin');
-    if (!origin)
-    {
-        return null;
-    }
-
-    const isAllowed = cors.allowedOrigins.includes('*') || cors.allowedOrigins.includes(origin);
-    if (!isAllowed)
-    {
-        return null;
-    }
-
-    // Handle preflight
-    if (request.method === 'OPTIONS')
-    {
-        return new Response(null, {
-            status: 204,
-            headers: corsHeaders(origin, cors)
-        });
-    }
-
-    return null;
-};
+const allowedOrigin = (origin: string, cors: CorsConfig) =>
+    cors.allowedOrigins.includes('*') || cors.allowedOrigins.includes(origin);
 
 export const applyCorsHeaders = (response: Response, request: Request, cors?: CorsConfig): void =>
 {
-    if (!cors?.enabled)
+    if (!cors?.enabled) return;
+    const wildcard = cors.allowedOrigins.includes('*') && !cors.allowCredentials;
+    if (!wildcard)
     {
-        return;
+        const vary = response.headers.get('Vary')?.split(',').map(value => value.trim().toLowerCase()) ?? [];
+        if (!vary.includes('*') && !vary.includes('origin')) response.headers.append('Vary', 'Origin');
     }
-
-    const origin = request.headers.get('origin');
-    if (!origin)
-    {
-        return;
-    }
-
-    const isAllowed = cors.allowedOrigins.includes('*') || cors.allowedOrigins.includes(origin);
-    if (!isAllowed)
-    {
-        return;
-    }
-
-    const headers = corsHeaders(origin, cors);
-    for (const [key, value] of headers.entries())
-    {
-        // Vary is additive - a handler may already vary on something else.
-        if (key.toLowerCase() === 'vary')
-        {
-            response.headers.append(key, value);
-            continue;
-        }
-
-        response.headers.set(key, value);
-    }
+    const origin = request.headers.get('Origin');
+    if (wildcard) response.headers.set('Access-Control-Allow-Origin', '*');
+    else if (origin && allowedOrigin(origin, cors)) response.headers.set('Access-Control-Allow-Origin', origin);
+    else return;
+    if (cors.allowCredentials) response.headers.set('Access-Control-Allow-Credentials', 'true');
+    if (cors.exposedHeaders.length) response.headers.set('Access-Control-Expose-Headers', cors.exposedHeaders.join(', '));
 };
 
-const corsHeaders = (origin: string, cors: CorsConfig): Headers =>
+/** Resolve the path first; ordinary OPTIONS remains a route operation. */
+export const handleCors = (request: Request, methods: RouteMethod[], cors?: CorsConfig): Response | null =>
 {
-    const headers = new Headers();
-
-    // Browsers reject `Allow-Origin: *` together with `Allow-Credentials: true`,
-    // so reflect the concrete origin when credentials are in play.
-    const isWildcard = cors.allowedOrigins.includes('*') && !cors.allowCredentials;
-
-    headers.set('Access-Control-Allow-Origin', isWildcard ? '*' : origin);
-    headers.set('Access-Control-Allow-Methods', cors.allowedMethods.join(', '));
-    headers.set('Access-Control-Allow-Headers', cors.allowedHeaders.join(', '));
-
-    // Whenever the response varies by request origin, caches must key on it too.
-    if (!isWildcard)
-    {
-        headers.set('Vary', 'Origin');
-    }
-
-    if (cors.exposedHeaders.length > 0)
-    {
-        headers.set('Access-Control-Expose-Headers', cors.exposedHeaders.join(', '));
-    }
-
-    if (cors.allowCredentials)
-    {
-        headers.set('Access-Control-Allow-Credentials', 'true');
-    }
-
-    if (cors.maxAge > 0)
-    {
-        headers.set('Access-Control-Max-Age', String(cors.maxAge));
-    }
-
-    return headers;
+    const origin = request.headers.get('Origin');
+    const requestedMethod = request.headers.get('Access-Control-Request-Method');
+    if (!cors?.enabled || request.method !== 'OPTIONS' || !origin || !requestedMethod) return null;
+    if (!allowedOrigin(origin, cors)) return new Response('Forbidden', {status: 403});
+    const allowed = methods.filter(method => cors.allowedMethods.includes(method));
+    if (!allowed.includes(requestedMethod as RouteMethod))
+        return new Response('Method Not Allowed', {status: 405, headers: {Allow: methods.join(', ')}});
+    const requestedHeaders = request.headers.get('Access-Control-Request-Headers')?.split(',')
+        .map(header => header.trim().toLowerCase()) ?? [];
+    const allowedHeaders = cors.allowedHeaders.map(header => header.toLowerCase());
+    if (requestedHeaders.some(header => !allowedHeaders.includes(header)))
+        return new Response('Forbidden', {status: 403});
+    return new Response(null, {status: 204, headers: {
+        'Access-Control-Allow-Methods': allowed.join(', '),
+        'Access-Control-Allow-Headers': cors.allowedHeaders.join(', '),
+        'Access-Control-Max-Age': String(cors.maxAge)
+    }});
 };

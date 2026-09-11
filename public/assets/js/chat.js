@@ -18,7 +18,7 @@ function joinChat() {
     chat.style.display = 'flex';
 
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(protocol + '//' + location.host + '/api/chat/ws?name=' + encodeURIComponent(name));
+    ws = new WebSocket(`${protocol}//${location.host}/api/chat/ws?name=${encodeURIComponent(name)}`);
 
     ws.onopen = () => {
         status.textContent = 'connected';
@@ -39,10 +39,10 @@ function joinChat() {
                 addSystem(data.message);
                 break;
             case 'join':
-                addSystem(data.name + ' joined the chat');
+                addSystem(`${data.name} joined the chat`);
                 break;
             case 'leave':
-                addSystem(data.name + ' left the chat');
+                addSystem(`${data.name} left the chat`);
                 break;
             case 'message':
                 addMessage(data.name, data.text);
@@ -66,7 +66,7 @@ msgInput.addEventListener('keydown', (e) => {
 function addMessage(name, text) {
     const el = document.createElement('div');
     el.className = 'msg';
-    el.innerHTML = '<span class="name">' + esc(name) + '</span> <span class="text">' + esc(text) + '</span>';
+    el.innerHTML = `<span class="name">${esc(name)}</span> <span class="text">${esc(text)}</span>`;
     messages.appendChild(el);
     messages.scrollTop = messages.scrollHeight;
 }

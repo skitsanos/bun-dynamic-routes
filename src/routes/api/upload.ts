@@ -1,4 +1,5 @@
-import {basename, join, resolve, sep} from 'node:path';
+import {lstat, mkdir, open, unlink} from 'node:fs/promises';
+import {basename, join, resolve} from 'node:path';
 import type {RouteHandler} from '../../core/types.ts';
 import Logger from '../../utils/logger.ts';
 
@@ -17,7 +18,7 @@ const uploadsDir = resolve(process.cwd(), 'uploads');
 const safeFileName = (rawName: string): string =>
 {
     const stripped = basename(rawName).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const withoutLeadingDots = stripped.replace(/^\.+/, '');
+    const withoutLeadingDots = stripped.replace(/^\.+/, '').replace(/\.{2,}/g, '_');
 
     return withoutLeadingDots.length > 0 ? withoutLeadingDots.slice(0, 128) : 'file';
 };
@@ -27,7 +28,11 @@ export const POST: RouteHandler = async ({req}) =>
     const startedAt = Bun.nanoseconds();
     logger.trace('Uploading file...');
 
-    const data = await req.formData();
+    if (req.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !== 'multipart/form-data')
+        return Response.json({success: false, message: 'Multipart form required'}, {status: 415});
+    let data: FormData;
+    try { data = await req.formData(); }
+    catch { return Response.json({success: false, message: 'Invalid multipart form'}, {status: 400}); }
     const uploadedFile = data.get('file');
 
     if (!(uploadedFile instanceof File))
@@ -39,23 +44,19 @@ export const POST: RouteHandler = async ({req}) =>
         }, {status: 400});
     }
 
-    const fileName = `uploaded_${Date.now()}_${safeFileName(uploadedFile.name)}`;
+    const fileName = `uploaded_${crypto.randomUUID()}_${safeFileName(uploadedFile.name)}`;
     const destination = join(uploadsDir, fileName);
-
-    // Defence in depth - safeFileName should already make this unreachable.
-    if (!resolve(destination).startsWith(`${uploadsDir}${sep}`))
-    {
-        logger.warn('Rejected upload with unsafe destination', {name: uploadedFile.name});
-
-        return Response.json({
-            success: false,
-            message: 'Invalid file name'
-        }, {status: 400});
-    }
 
     try
     {
-        await Bun.write(destination, uploadedFile);
+        await mkdir(uploadsDir, {recursive: true});
+        const directory = await lstat(uploadsDir);
+        if (!directory.isDirectory() || directory.isSymbolicLink()) throw new Error('Invalid uploads directory');
+        // Exclusive creation also prevents replacing an existing file or symlink.
+        const file = await open(destination, 'wx', 0o600);
+        try { await file.writeFile(new Uint8Array(await uploadedFile.arrayBuffer())); }
+        catch (error) { await unlink(destination); throw error; }
+        finally { await file.close(); }
         logger.trace(`File uploaded: ${fileName}`);
 
         return Response.json({

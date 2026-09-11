@@ -1,98 +1,35 @@
-import {extname, join, sep} from 'node:path';
+import {containedFile, decodeFilePath} from './files.ts';
 
-const MIME_TYPES: Record<string, string> = {
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.js': 'application/javascript',
-    '.mjs': 'application/javascript',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.ico': 'image/x-icon',
-    '.webp': 'image/webp',
-    '.woff': 'font/woff',
-    '.woff2': 'font/woff2',
-    '.ttf': 'font/ttf',
-    '.otf': 'font/otf',
-    '.txt': 'text/plain',
-    '.xml': 'text/xml',
-    '.pdf': 'application/pdf',
-    '.mp4': 'video/mp4',
-    '.webm': 'video/webm',
-    '.mp3': 'audio/mpeg',
-    '.wav': 'audio/wav'
-};
-
-/**
- * Serves static files from the given directory.
- * Returns a Response if the file exists, or null to pass through to routing.
- */
-export const serveStatic = async (
-    pathname: string,
-    publicDir: string,
-    ifNoneMatch?: string | null
-): Promise<Response | null> =>
+export const findStaticFile = async (pathname: string, publicDir: string): Promise<string | null> =>
 {
-    // URL pathnames arrive percent-encoded, so decode before touching the filesystem -
-    // otherwise a file such as `my style.css` is unreachable via `/my%20style.css`.
-    let decodedPath: string;
-    try
-    {
-        decodedPath = decodeURIComponent(pathname);
-    }
-    catch
-    {
-        // Malformed percent-encoding
-        return null;
-    }
+    const name = decodeFilePath(pathname);
+    return name ? containedFile(publicDir, name) : null;
+};
+const weakTag = (tag: string) => tag.replace(/^W\//, '');
+const dateValue = (value: string | null) => value === null ? NaN : Date.parse(value);
 
-    // Block path traversal. Checked after decoding so `%2e%2e` cannot slip through.
-    if (decodedPath.includes('..') || decodedPath.includes('\0'))
-    {
-        return null;
-    }
-
-    const filePath = join(publicDir, decodedPath);
-
-    // Ensure resolved path stays within public dir. The separator matters: a bare
-    // prefix check would also accept a sibling such as `<publicDir>-private`.
-    if (filePath !== publicDir && !filePath.startsWith(`${publicDir}${sep}`))
-    {
-        return null;
-    }
-
-    const file = Bun.file(filePath);
-    if (!await file.exists())
-    {
-        return null;
-    }
-
-    const ext = extname(filePath).toLowerCase();
-    const contentType = MIME_TYPES[ext] ?? 'application/octet-stream';
-
-    // HTML is the entrypoint that references fingerprinted assets, so it must be
-    // revalidated rather than held for an hour.
-    const cacheControl = ext === '.html'
-        ? 'public, max-age=0, must-revalidate'
-        : 'public, max-age=3600';
-
-    // Weak validator derived from size + mtime - enough for conditional requests
-    // without reading the file to hash it.
+/** Bun retains responsibility for HEAD and byte-range file responses. */
+export const serveStatic = (request: Request, path: string): Response =>
+{
+    const file = Bun.file(path);
     const etag = `W/"${file.size.toString(16)}-${Math.floor(file.lastModified).toString(16)}"`;
-    const headers: HeadersInit = {
-        'Content-Type': contentType,
-        'Cache-Control': cacheControl,
+    const modified = Math.floor(file.lastModified / 1000) * 1000;
+    const headers = {
+        'Content-Type': file.type,
+        'Cache-Control': 'public, max-age=0, must-revalidate',
         ETag: etag,
-        'Last-Modified': new Date(file.lastModified).toUTCString()
+        'Last-Modified': new Date(modified).toUTCString()
     };
-
-    if (ifNoneMatch?.split(',').some((candidate) => candidate.trim() === etag))
-    {
+    const ifMatch = request.headers.get('if-match');
+    // A weak ETag cannot satisfy a strong If-Match comparison.
+    if (ifMatch !== null && ifMatch.trim() !== '*') return new Response(null, {status: 412, headers});
+    if (ifMatch === null && modified > dateValue(request.headers.get('if-unmodified-since')))
+        return new Response(null, {status: 412, headers});
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch !== null && (ifNoneMatch.trim() === '*'
+        || ifNoneMatch.split(',').some(tag => weakTag(tag.trim()) === weakTag(etag))))
         return new Response(null, {status: 304, headers});
-    }
-
+    if (ifNoneMatch === null && modified <= dateValue(request.headers.get('if-modified-since')))
+        return new Response(null, {status: 304, headers});
     return new Response(file, {headers});
 };

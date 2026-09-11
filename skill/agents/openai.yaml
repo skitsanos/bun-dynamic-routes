@@ -1,0 +1,6 @@
+interface:
+  display_name: "Bun Server"
+  short_description: "Build Bun-native APIs, websites, and full-stack apps"
+  default_prompt: "Use $bun-server to build, harden, and validate a Bun-native TypeScript API, website, or full-stack application."
+policy:
+  allow_implicit_invocation: true

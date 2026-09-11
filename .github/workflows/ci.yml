@@ -1,0 +1,35 @@
+name: Verify template
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun --version
+      - run: bun install --frozen-lockfile
+      - run: bun run verify
+      - name: Export and validate the canonical skill
+        run: |
+          bun run skill:sync --target "$RUNNER_TEMP/bun-server"
+          bun run skill:check --target "$RUNNER_TEMP/bun-server"
+          bun "$RUNNER_TEMP/bun-server/scripts/validate-template.ts"
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run test:docker

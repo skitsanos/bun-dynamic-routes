@@ -15,7 +15,9 @@ export const GET: RouteHandler = () =>
         logLevel: config.logLevel,
         server: {
             port: config.server.port,
+            hostname: config.server.hostname,
             maxRequestBodySize: config.server.maxRequestBodySize,
+            shutdownGracePeriodMs: config.server.shutdownGracePeriodMs,
             trustProxy: config.server.trustProxy,
             cors: config.server.cors,
             ssl: {enabled: Boolean(config.server.ssl)}

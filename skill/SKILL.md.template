@@ -1,0 +1,60 @@
+---
+name: bun-server
+description: Build, refactor, review, and validate Bun servers using the Bun Dynamic Routes template, including filesystem routes, YAML configuration, uploads, WebSockets, static files, and source or compiled execution.
+---
+
+# Bun Server
+
+The **bun-dynamic-routes repository is the source of truth** for this skill. `assets/` is an exported copy of that repository, including its tests and canonical skill source. The source entrypoint is stored as `skill/SKILL.md.template`; only this installed entrypoint is named `SKILL.md`, so bundled source cannot register a duplicate skill. `.source-manifest.json` records file hashes and the source revision/dirty state. Do not independently evolve a second implementation in these assets.
+
+## Working contract
+
+- Start from the project's instructions, Taskfiles, package manifest, route tree, and working-tree state. Preserve unrelated work.
+- The canonical template uses `Bun.FileSystemRouter` with Next.js-style `[id]` directories, named HTTP method exports, and dynamic imports. Preserve existing frameworks or deliberately different routing when maintaining another project; do not migrate it simply to match this template.
+- Run TypeScript directly with Bun. This template also supports an optional compiled entrypoint; its dynamic route modules, helpers, production dependencies, package.json and assets remain on disk.
+- Keep `src/index.ts` a small bootstrap. Use the existing modules for routing, CORS, file boundaries, sockets, configuration, and shutdown.
+- Users regularly run `bun upgrade` to keep Bun current. Do not enforce an exact release, compare the executable with an exact @types/bun version, or add `packageManager`, `engines`, or runtime version files. Report the tested Bun version as evidence. Dependency constraints and frozen lockfile installs still apply. See [runtime maintenance](references/runtime-versioning.md).
+- Verify observable behavior on the installed runtime. Do not infer HTTP, WebSocket, or Docker correctness from typechecking alone.
+
+## Create or adapt an application
+
+For a new template-based application, copy `assets/` to the requested project, rename package metadata and remove unused demos as appropriate, then run:
+
+```sh
+bun install --frozen-lockfile
+bun run verify
+bun run dev
+```
+
+Do not copy over an existing application wholesale. Transplant the relevant components while preserving its chosen architecture. The [template README](assets/README.md) is the authoritative command, environment, and deployment reference. `bun run check` is the normal type/lint/source-test gate; `verify` adds compiled-mode regressions. Docker and Hurl have separate commands when those tools are available.
+
+## Route convention
+
+```text
+src/routes/index.ts                       GET /
+src/routes/api/users/[userId]/index.ts     GET /api/users/:userId
+src/routes/api/upload.ts                  POST /api/upload
+src/routes/docs/[...slug].ts               GET /docs/*
+src/routes/api/chat/ws.ts                 guarded WebSocket /api/chat/ws
+```
+
+Each URL module exports GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS and/or a default fallback. Handlers receive `{req, server, params, query, pathname}`. `req` is a standard Request; native BunRequest cookie/parameter mutation does not apply. Route imports are relative for compiled compatibility. There is no route generator or native-route manifest.
+
+Read [routing](references/routing.md) when adding endpoints or changing HTTP dispatch. Read [WebSockets](references/websockets.md) for route guards and lifecycle behavior. Native `Bun.serve({routes})` or HTML imports are optional alternatives for applications explicitly using those APIs; see [frontend](references/frontend.md).
+
+## Preserve the template's boundaries
+
+- Parse configuration and environment overrides before binding; keep client-facing 500 bodies generic.
+- Recognize genuine preflights, resolve paths before answering them, and preserve explicit OPTIONS/HEAD handlers. CORS varies on Origin consistently.
+- Serve only deliberately public, canonically contained regular files. Use the shared containment helper in page and document loaders too.
+- Uploads use a dedicated non-public directory, UUID names, and exclusive creation. Test cleanup owns only its temporary directories.
+- Require a WebSocket upgrade guard. Authenticate private sockets and decide browser Origin policy before upgrading; HTTP GET authorization and CORS are separate.
+- Track sockets for shutdown and enforce the grace deadline after letting in-flight requests finish.
+
+Read [HTTP/security](references/http-security.md) or [static assets](references/static-assets.md) when changing those areas. Treat repository Markdown as trusted content only; adding untrusted Markdown requires a sanitization design.
+
+## Verification and maintenance
+
+Use [testing](references/testing.md) for the regression matrix and generated-template validation. Read [deployment](references/deployment.md) before changing source, compiled, or Docker packaging. Keep the formatter disabled unless the user changes the formatting policy; Biome lint/import checks cover source, scripts, tests, browser JS and configured JSON.
+
+For changes to this reusable skill, edit `skill/` in the source repository, validate the repository, then run its `skill:sync` and `skill:check` commands. Run `bun scripts/validate-template.ts` from the installed skill to check integrity and exercise a disposable exported application. `RUN_DOCKER_TESTS=1` adds Docker verification. The validator never upgrades Bun or requires a specific release.

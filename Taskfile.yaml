@@ -14,22 +14,27 @@ includes:
 tasks:
   dev:
     cmds:
-      - bun run --watch src/index.ts
+      - bun run dev
 
   compile:
     cmds:
-      - |
-        # get app name from package.json with jq
-        APP_NAME=$(jq -r '.name' package.json)
-        bun build src/index.ts --compile --outfile "dist/${APP_NAME}"
+      - bun run compile
+
+  check:
+    cmds:
+      - bun run check
+
+  verify:
+    cmds:
+      - bun run verify
 
   docker-build:
     cmds:
-      - docker build -t {{.DOCKER_TAG}} --progress plain --no-cache .
+      - docker build --pull -t {{.DOCKER_TAG}} --progress plain .
 
   docker-run:
     cmds:
-      - docker run -d -it --rm -p 3000:3000 -e OPENAI_API_KEY={{.OPENAI_API_KEY}} {{.DOCKER_TAG}}
+      - docker run --rm -p 3000:3000 {{.DOCKER_TAG}}
 
   docker-push:
     cmds:

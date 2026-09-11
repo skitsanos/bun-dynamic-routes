@@ -19,12 +19,12 @@ A **Bun-native** web server template — no frameworks, minimal dependencies.
 
 - `GET /api/health` — health check with `binary: true/false` indicator
 - `GET /api/version` — Bun and package version
-- `GET /api/config` — current server configuration
+- `GET /api/config` — allowlisted server configuration, excluding TLS material
 - `GET /api/users/:userId` — dynamic route params
 - `POST /api/upload` — file upload via `multipart/form-data`
 - `POST /api/validate/zod` — Zod schema validation
 - `POST /api/validate/form` — form body validation
-- `GET /api/chat/ws` — WebSocket upgrade (pub/sub chat)
+- `GET /api/chat/ws` — guarded WebSocket upgrade (public pub/sub chat demo)
 
 ## Pages
 
@@ -40,17 +40,22 @@ bun install
 bun run dev
 ```
 
+Keep Bun current with regular `bun upgrade` runs. The template does not pin a runtime version or require `packageManager` or `engines` entries. Run `bun run verify` after updates for type checking, Biome, and isolated source/compiled regression tests.
+
 ## Project Structure
 
 ```
 src/
   index.ts                      # Server bootstrap
-  core/configuration.ts         # Config types + defaults
+  core/configuration.ts         # Validated YAML, environment overrides, defaults
+  core/types.ts                 # Route context and WebSocket contracts
+  server/                       # Server, dispatch, sockets, bounded shutdown
   utils/
     loadConfig.ts               # YAML loader (Bun.file + YAML.parse)
     logger.ts                   # Bun-native logger
     cors.ts                     # CORS middleware
     staticFiles.ts              # Static file serving
+    files.ts                    # Canonical path containment
   routes/
     index.ts                    # GET /
     chat.ts                     # GET /chat

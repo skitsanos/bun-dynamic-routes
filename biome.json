@@ -1,40 +1,40 @@
 {
-    "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
-    "vcs": {
-        "enabled": true,
-        "clientKind": "git",
-        "useIgnoreFile": true
-    },
-    "files": {
-        "includes": ["src/**/*.ts", "src/**/*.tsx"],
-        "ignoreUnknown": true
-    },
-    "formatter": {
-        "enabled": false
-    },
-    "linter": {
-        "enabled": true,
-        "rules": {
-            "recommended": true,
-            "style": {
-                "noNonNullAssertion": "off",
-                "useConst": "warn",
-                "useNodejsImportProtocol": "warn"
-            },
-            "suspicious": {
-                "noExplicitAny": "off"
-            },
-            "complexity": {
-                "noForEach": "off"
-            }
-        }
-    },
-    "assist": {
-        "enabled": true,
-        "actions": {
-            "source": {
-                "organizeImports": "on"
-            }
-        }
-    }
+	"$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+        "includes": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts", "tests/**/*.ts", "public/assets/js/**/*.js", "*.json", "skill/**/*.ts"],
+		"ignoreUnknown": true
+	},
+	"formatter": {
+		"enabled": false
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"style": {
+				"noNonNullAssertion": "off",
+				"useConst": "warn",
+				"useNodejsImportProtocol": "warn"
+			},
+			"suspicious": {
+				"noExplicitAny": "off"
+			},
+			"complexity": {
+				"noForEach": "off"
+			}
+		}
+	},
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	}
 }
