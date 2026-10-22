@@ -2,9 +2,13 @@
 
 Run `bun install --frozen-lockfile` followed by `bun run verify` after dependency changes or a user-run `bun upgrade`. The installed runtime is tested directly; its version is reported for evidence and is never compared with an exact required Bun release. `@types/bun` remains a normal development dependency.
 
-`bun run check` runs strict TypeScript, Biome with warnings treated as failures, and the Bun test suite. `bun run verify` adds compiled execution of the same suite. Biome covers source, tests, scripts, browser JavaScript, root JSON, and skill validator code; formatting remains disabled and import organization enabled. CSS, HTML, Markdown, and YAML are not claimed as linted by this command.
+`bun run check` runs strict native TypeScript checking (`bun check --no-script`), Biome with warnings treated as failures, and the Bun test suite. `--no-script` avoids invoking the aggregate `check` script when the type checker is called directly. The TypeScript development dependency remains for editors and optional comparison with `bunx tsc --noEmit`. `bun run verify` adds compiled execution of the same suite. Biome covers source, tests, scripts, browser JavaScript, root JSON, and skill validator code; formatting remains disabled and import organization enabled. CSS, HTML, Markdown, and YAML are not claimed as linted by this command.
+
+The [Bun 1.4.4 formatter](https://bun.com/docs/format) is optional; neither `bun fmt` nor a formatting check is part of this template's gate. At that release, [bun lint](https://bun.com/docs/lint) is canary-only. Keep Biome until a deliberate migration verifies stable availability and equivalent lint coverage.
 
 Every server regression runs in a temporary application with a fresh upload directory and ephemeral port. Compiled tests create and remove their own binary. Cleanup only removes the temporary tree created by that runner. Child processes are stopped even after a failing assertion.
+
+Server startup waits up to three seconds by default. Failures report elapsed time, the deadline, execution mode, command, working directory, PID, exit/signal state at failure, and the last 16,384 characters of combined stdout/stderr. A timed-out process is stopped before draining its final output. Regression tests deliberately exit, signal, or hang a startup module and verify both diagnostics and process cleanup. A startup timeout alone is not evidence of a runtime incompatibility; use its captured diagnostics to investigate.
 
 | Reviewed finding | Executable verification |
 |---|---|

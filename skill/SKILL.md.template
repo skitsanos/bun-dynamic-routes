@@ -55,6 +55,6 @@ Read [HTTP/security](references/http-security.md) or [static assets](references/
 
 ## Verification and maintenance
 
-Use [testing](references/testing.md) for the regression matrix and generated-template validation. Read [deployment](references/deployment.md) before changing source, compiled, or Docker packaging. Keep the formatter disabled unless the user changes the formatting policy; Biome lint/import checks cover source, scripts, tests, browser JS and configured JSON.
+Use [testing](references/testing.md) for the regression matrix and generated-template validation. Type checking uses `bun check --no-script`; Biome supplies lint/import checks for source, scripts, tests, browser JS and configured JSON. Keep formatting disabled unless the user changes the policy. Bun's optional formatter does not replace lint coverage; check stable native-linter availability before proposing a migration. Read [deployment](references/deployment.md) before changing source, compiled, or Docker packaging.
 
 For changes to this reusable skill, edit `skill/` in the source repository, validate the repository, then run its `skill:sync` and `skill:check` commands. Run `bun scripts/validate-template.ts` from the installed skill to check integrity and exercise a disposable exported application. `RUN_DOCKER_TESTS=1` adds Docker verification. The validator never upgrades Bun or requires a specific release.

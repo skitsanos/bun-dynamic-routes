@@ -18,6 +18,7 @@ Open `http://localhost:3000`, `/chat`, or `/docs/readme`. After upgrading Bun or
 |---|---|
 | `bun run dev` / `task dev` | Source server with hot reload |
 | `bun run start` | Source server; set NODE_ENV=production for production |
+| `bun run typecheck` | Bun's native TypeScript checker, bypassing the aggregate check script |
 | `bun run check` / `task check` | Strict TypeScript, Biome, isolated regression tests |
 | `bun run verify` / `task verify` | Check plus the same regressions against a compiled executable |
 | `bun run test` / `task test` | Real HTTP/WebSocket/config/shutdown regressions in temporary applications |
@@ -27,6 +28,8 @@ Open `http://localhost:3000`, `/chat`, or `/docs/readme`. After upgrading Bun or
 | `bun run lint` / `bun run lint:fix` | Lint/import checks or reviewed fixes; formatter disabled |
 
 Tests start their own servers on ephemeral ports and only delete temporary directories they create. They do not use a caller's `uploads/`, overwrite a caller's `random_file`, or require a prestarted application. See [verification and finding coverage](docs/verification.md).
+
+Type checking runs `bun check --no-script`; plain `bun check` also names this repository's aggregate script. The TypeScript development dependency remains for editors and optional `bunx tsc --noEmit` comparison. Biome handles lint rules and import organization. Formatting remains disabled; `bun fmt` is an optional formatter that rewrites files when invoked without `--check`, and is not part of verification. As of the Bun 1.4.4 review, the [built-in linter](https://bun.com/docs/lint) is canary-only, so it does not replace this template's stable Biome gate.
 
 ## Routes and handler contract
 

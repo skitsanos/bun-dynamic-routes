@@ -3,6 +3,17 @@ import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 
 export const projectRoot = resolve(import.meta.dir, '..');
+const startupOutputLimit = 16 * 1024;
+const stopChild = async (child: ReturnType<typeof Bun.spawn>) =>
+{
+    if (child.exitCode === null && child.signalCode === null)
+    {
+        child.kill('SIGTERM');
+        await Promise.race([child.exited, Bun.sleep(1000)]);
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
+    await child.exited;
+};
 export const until = async <T>(check: () => T | Promise<T>, timeout = 3000): Promise<NonNullable<T>> =>
 {
     const deadline = Date.now() + timeout;
@@ -54,31 +65,50 @@ export const createSandbox = async (withFixtures = true) =>
         let output = '';
         const capture = async (stream: ReadableStream<Uint8Array>) =>
         {
-            for await (const chunk of stream) output += new TextDecoder().decode(chunk);
+            const decoder = new TextDecoder();
+            for await (const chunk of stream)
+                output = (output + decoder.decode(chunk, {stream: true})).slice(-startupOutputLimit);
+            output = (output + decoder.decode()).slice(-startupOutputLimit);
         };
         const captured = Promise.all([capture(processHandle.stdout), capture(processHandle.stderr)]);
-        return {process: processHandle, output: () => output, captured};
+        return {process: processHandle, command, output: () => output, captured};
     };
-    const start = async (environment: Record<string, string> = {}, hot = false) =>
+    const start = async (environment: Record<string, string> = {}, hot = false, options: {timeoutMs?: number} = {}) =>
     {
         const child = launch(environment, hot);
-        const url = await until(() =>
+        const timeoutMs = options.timeoutMs ?? 3000;
+        const startedAt = Date.now();
+        try
         {
-            if (child.process.exitCode !== null) throw new Error(`Server exited: ${child.output()}`);
-            return child.output().match(/Server started at (https?:\/\/\S+)/)?.[1];
-        });
-        return {...child, url};
+            const url = await until(() =>
+            {
+                if (child.process.exitCode !== null || child.process.signalCode !== null)
+                    throw new Error('Server exited before startup');
+                return child.output().match(/Server started at (https?:\/\/\S+)/)?.[1];
+            }, timeoutMs);
+            return {...child, url};
+        }
+        catch (cause)
+        {
+            const elapsed = Date.now() - startedAt;
+            const exitCode = child.process.exitCode;
+            const signal = child.process.signalCode;
+            // Drain both pipes after stopping a timed-out child, including its final diagnostics.
+            await stopChild(child.process);
+            await child.captured;
+            throw new Error([
+                `Server startup failed after ${elapsed}ms (timeout ${timeoutMs}ms).`,
+                `Mode: ${hot ? 'hot' : process.env.TEST_BINARY ? 'compiled' : 'source'}; cwd: ${app}`,
+                `Command: ${JSON.stringify(child.command)}`,
+                `PID: ${child.process.pid}; exit code: ${exitCode ?? 'running'}; signal: ${signal ?? 'none'}`,
+                `Captured stdout/stderr (last ${startupOutputLimit} characters):`,
+                child.output() || '(no output)'
+            ].join('\n'), {cause});
+        }
     };
     const cleanup = async () =>
     {
-        for (const child of children)
-        {
-            if (child.exitCode !== null) continue;
-            child.kill('SIGTERM');
-            await Promise.race([child.exited, Bun.sleep(1000)]);
-            if (child.exitCode === null) child.kill('SIGKILL');
-            await child.exited;
-        }
+        for (const child of children) await stopChild(child);
         await rm(root, {recursive: true, force: true});
     };
     return {root, app, start, launch, cleanup};

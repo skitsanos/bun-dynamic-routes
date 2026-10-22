@@ -8,7 +8,7 @@
     "compile": "bun build --compile --production src/index.ts --outfile dist/demo",
     "lint": "bunx biome check . --error-on-warnings",
     "lint:fix": "bunx biome check . --write",
-    "typecheck": "bunx tsc --noEmit",
+    "typecheck": "bun check --no-script",
     "test": "bun test tests",
     "test:compiled": "bun scripts/test-compiled.ts",
     "test:docker": "bun scripts/test-docker.ts",

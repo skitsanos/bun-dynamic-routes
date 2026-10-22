@@ -57,6 +57,6 @@ Authenticate private sockets in `upgrade` before returning accept. A GET authori
 
 ## Verify and deploy
 
-`bun run check` runs strict TypeScript, Biome and isolated tests. `bun run verify` also checks compiled execution. `bun run test:hurl` and `bun run test:docker` provide optional Hurl and Docker checks when those tools are installed. None requires a running local application or deletes existing uploads.
+`bun run typecheck` uses Bun's native `bun check --no-script`. `bun run check` adds Biome and isolated tests; `bun run verify` also checks compiled execution. Biome checks lint rules and imports, with formatting disabled. `bun fmt` is optional and is not run by verification. `bun run test:hurl` and `bun run test:docker` provide optional Hurl and Docker checks when those tools are installed. None requires a running local application or deletes existing uploads.
 
 Run production source with `NODE_ENV=production bun run start`. To compile, use `bun run compile` and start `./dist/demo` from the project root. Keep source route modules, helpers, production dependencies, package.json, public assets, and optional YAML config on disk; the binary is not a self-contained distribution.

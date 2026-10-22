@@ -3,6 +3,40 @@ import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {connect, createSandbox, until} from './support.ts';
 
+for (const failure of ['exit', 'signal', 'timeout'] as const)
+{
+    test(`startup diagnostics capture ${failure} and stop the failed process`, async () =>
+    {
+        const sandbox = await createSandbox(false);
+        try
+        {
+            const action = failure === 'exit' ? 'process.exit(23);'
+                : failure === 'signal' ? "process.kill(process.pid, 'SIGTERM');"
+                : 'setInterval(() => {}, 1000); await new Promise(() => {});';
+            await Bun.write(join(sandbox.app, 'src/routes/startup-probe.ts'), `
+                export const GET=()=>new Response('unused');
+                await Bun.write('diagnostic.pid', String(process.pid));
+                console.log('SYNTHETIC STARTUP STDOUT');
+                console.error('SYNTHETIC STARTUP STDERR');
+                ${action}
+            `);
+            const timeoutMs = failure === 'timeout' ? 1500 : 3000;
+            const error = await sandbox.start({}, false, {timeoutMs}).then(() => null, error => error);
+            expect(error).toBeInstanceOf(Error);
+            expect(error.message).toContain(`timeout ${timeoutMs}ms`);
+            expect(error.message).toContain(sandbox.app);
+            expect(error.message).toContain('SYNTHETIC STARTUP STDOUT');
+            expect(error.message).toContain('SYNTHETIC STARTUP STDERR');
+            if (failure === 'exit') expect(error.message).toContain('exit code: 23');
+            if (failure === 'signal') expect(error.message).toContain('signal: SIGTERM');
+            if (failure === 'timeout') expect(error.cause.message).toContain('Timed out');
+            const pid = Number(await readFile(join(sandbox.app, 'diagnostic.pid'), 'utf8'));
+            expect(() => process.kill(pid, 0)).toThrow();
+        }
+        finally { await sandbox.cleanup(); }
+    });
+}
+
 test('SIGTERM completes HTTP, closes sockets with 1012 and exits successfully', async () =>
 {
     const sandbox = await createSandbox();
